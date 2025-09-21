@@ -1,95 +1,100 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>看護アシスタント – はじめる</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>看護アシスタント | 入口</title>
 <style>
-:root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb;--ink:#241b22;--sub:#74636f}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#2e2a2f;
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
-.wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12)}
-.hero{border:1px solid var(--line);border-radius:14px;background:#fff8fc;padding:22px 18px}
-.hero h1{margin:0 0 10px;font-size:40px;color:var(--ink)}
-.hero p.lead{margin:0 0 6px;font-size:18px;line-height:1.7}
-.hero p.sub{margin:12px 0 0;font-size:12px;color:var(--sub)}
-.btn{display:inline-block;margin-top:16px;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
-.note{margin-top:16px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
-.status{margin-top:16px;padding:12px;border:1px solid #f2d3df;background:#fffafb;border-radius:12px;min-height:64px}
-.badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#ffe9f2;color:#8a3b58;font-weight:700;margin-right:8px}
-.ok{background:#e6f6ec;color:#1b7a3f}.ng{background:#ffe3e6;color:#8f1d28}.spin{background:#fff2d6;color:#8f5e00}
-.small{font-size:12px;color:#8a7b84}
-.hidden{display:none}
+:root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--accent2:#f7cfe3;--text:#2e2a2f}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
+.wrap{max-width:1100px;margin:28px auto;padding:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 20px}
+h1{font-size:48px;margin:6px 0 14px}
+.lead{font-size:22px;line-height:1.7;margin:10px 0 24px}
+.small{color:#6b5a64;font-size:14px}
+.btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
+.btn:hover{filter:brightness(.98)}
+.row{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;margin-left:8px}
+.badge.ok{background:#e6f6ec;color:#1b7a3f}
+.badge.ng{background:#ffe2e6;color:#8f1d28}
+pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:220px;overflow:auto}
+.center{display:flex;gap:12px;align-items:center}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <section class="hero" aria-label="greeting">
+  <div class="card">
     <h1>いつもお疲れさまです</h1>
-    <p class="lead">ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。</p>
-    <p class="lead">記録・画像は端末内で完結します。外には出しません。安心してお使いください。</p>
-    <p class="sub">※ 端末の準備が終わっていれば、下のボタンまたは自動接続でそのまま始まります。</p>
+    <p class="lead">ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。<br>
+    記録・画像は端末内で完結します。外には出しません。安心してお使いください。</p>
 
-    <!-- 直接ローカルに遷移（サーバがいれば即OK） -->
-    <a id="btnGo" class="btn" href="http://127.0.0.1:8787/">▶ はじめる</a>
-
-    <div id="status" class="status">
-      <span id="badge" class="badge spin">接続待機中</span>
-      <span id="msg">ローカルを探しています…起動していれば自動で画面が切り替わります。</span>
-      <div class="small" style="margin-top:8px">
-        反応がない場合のみ、院内サポートへご連絡ください。
-      </div>
+    <div class="center">
+      <button id="btnStart" class="btn">▶ はじめる</button>
+      <span id="stat" class="badge ng">接続NG</span>
     </div>
 
-    <div id="help" class="note hidden">
-      <strong>起動できないとき</strong><br>
-      ・ネットワークに制限はありません（院内LANでOK）。<br>
-      ・PC再起動でも直らない場合は、端末の「看護アシスタント（自動起動）」が停止している可能性があります。<br>
-      ・サポートに「ローカルサーバの自動起動を確認してください」とお伝えください。
+    <div class="row small">
+      <div id="hint">起動リンクを開きました。反応が無ければ下の「初回セットアップ」を一度だけ実施してください。</div>
     </div>
-  </section>
+
+    <div class="row">
+      <details>
+        <summary class="small">初回セットアップ（配布側が1回だけ）</summary>
+        <ol class="small">
+          <li>このフォルダごと配布端末へ配置（zipでもOK）。</li>
+          <li><code>deploy.ps1</code> をダブルクリック（ユーザ権限でOK）。</li>
+          <li>以後はログイン時に自動でサーバが起動します。看護師はこのページから「はじめる」を押すだけ。</li>
+        </ol>
+        <p class="small">※ 自動起動済みであれば 127.0.0.1 と通信して自動遷移します。</p>
+      </details>
+    </div>
+
+    <div class="row small">
+      <strong>状況</strong>
+      <pre id="log"></pre>
+    </div>
+  </div>
 </div>
 
 <script>
-const BADGE=document.getElementById('badge');
-const MSG=document.getElementById('msg');
-const HELP=document.getElementById('help');
-const PORT=8787;
-const HEALTH=`http://127.0.0.1:${PORT}/ai/health`;
-const TARGET=`http://127.0.0.1:${PORT}/`;
+const LOG = document.getElementById('log');
+const STAT = document.getElementById('stat');
+const HINT = document.getElementById('hint');
 
-function setBadge(kind,text){
-  BADGE.className='badge '+kind;
-  BADGE.textContent=text;
-}
-async function ping(){
+function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
+async function checkOnce(){
   try{
-    const c = await fetch(HEALTH,{mode:'no-cors',cache:'no-store'}); // no-corsでも到達＝起動の目安
-    // 到達した時点で遷移（レスポンス内容はno-corsなので見ない）
-    setBadge('ok','接続OK');
-    MSG.textContent='接続できました。画面を開きます…';
-    location.href = TARGET;
+    const r = await fetch('http://127.0.0.1:8787/ai/health', {cache:'no-store',mode:'no-cors'});
+    // mode:no-cors だとステータス取れないので到達＝OK扱い
+    STAT.textContent = '接続OK'; STAT.className='badge ok';
     return true;
   }catch(e){
+    STAT.textContent = '接続NG'; STAT.className='badge ng';
     return false;
   }
 }
-
-// すぐに連打ポーリング（最大 ~20秒）
-let attempts=0, max=40;
-(async function auto(){
-  setBadge('spin','接続待機中');
-  MSG.textContent='ローカルを探しています…';
-  let ok=false;
-  while(attempts++<max){
-    ok = await ping();
-    if(ok) return;
-    await new Promise(r=>setTimeout(r,500));
+async function tryOpenUI(){
+  const ok = await checkOnce();
+  if(ok){
+    log('OK: ローカルに到達。UIへ移動します。');
+    location.href = 'http://127.0.0.1:8787/';
+  }else{
+    log('NG: ローカル未起動。起動を待機します…');
+    // 10秒間、1秒ごとに再チェック
+    for(let i=0;i<10;i++){
+      await new Promise(r=>setTimeout(r,1000));
+      if(await checkOnce()){ location.href='http://127.0.0.1:8787/'; return; }
+    }
+    log('NG: まだ起動していません。配布側の初回セットアップをご確認ください。');
   }
-  setBadge('ng','未接続');
-  MSG.textContent='見つかりませんでした。「▶ はじめる」を押しても開けない場合は端末側の起動が止まっています。';
-  HELP.classList.remove('hidden');
-})();
+}
+
+document.getElementById('btnStart').addEventListener('click', tryOpenUI);
+
+// ページを開いたら自動で軽くチェック
+tryOpenUI();
 </script>
 </body>
 </html>
