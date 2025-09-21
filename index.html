@@ -6,7 +6,7 @@
 <title>看護アシスタント – はじめる</title>
 <style>
 :root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb;--ink:#241b22;--sub:#74636f}
-*{box-sizing:border-box} body{margin:0;background:var(--bg);color:#2e2a2f;
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#2e2a2f;
 font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
 .wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12)}
 .hero{border:1px solid var(--line);border-radius:14px;background:#fff8fc;padding:22px 18px}
@@ -14,7 +14,10 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"
 .hero p.lead{margin:0 0 6px;font-size:18px;line-height:1.7}
 .hero p.sub{margin:12px 0 0;font-size:12px;color:var(--sub)}
 .btn{display:inline-block;margin-top:16px;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
-.note{margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
+.note{margin-top:16px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
+.status{margin-top:16px;padding:12px;border:1px solid #f2d3df;background:#fffafb;border-radius:12px;min-height:64px}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#ffe9f2;color:#8a3b58;font-weight:700;margin-right:8px}
+.ok{background:#e6f6ec;color:#1b7a3f}.ng{background:#ffe3e6;color:#8f1d28}.spin{background:#fff2d6;color:#8f5e00}
 .small{font-size:12px;color:#8a7b84}
 .hidden{display:none}
 </style>
@@ -25,20 +28,68 @@ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"
     <h1>いつもお疲れさまです</h1>
     <p class="lead">ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。</p>
     <p class="lead">記録・画像は端末内で完結します。外には出しません。安心してお使いください。</p>
-    <p class="sub">※ 端末は既に院内で準備済みです。下のボタンを押すだけで起動します。</p>
+    <p class="sub">※ 端末の準備が終わっていれば、下のボタンまたは自動接続でそのまま始まります。</p>
 
-    <!-- カスタムURLスキーム（部署側で事前登録済み想定） -->
-    <a id="start" class="btn" href="nurseui://start">▶ はじめる</a>
+    <!-- 直接ローカルに遷移（サーバがいれば即OK） -->
+    <a id="btnGo" class="btn" href="http://127.0.0.1:8787/">▶ はじめる</a>
 
-    <div id="status" class="note hidden"></div>
-    <p class="small">反応がない場合は院内サポートにご連絡ください。</p>
+    <div id="status" class="status">
+      <span id="badge" class="badge spin">接続待機中</span>
+      <span id="msg">ローカルを探しています…起動していれば自動で画面が切り替わります。</span>
+      <div class="small" style="margin-top:8px">
+        反応がない場合のみ、院内サポートへご連絡ください。
+      </div>
+    </div>
+
+    <div id="help" class="note hidden">
+      <strong>起動できないとき</strong><br>
+      ・ネットワークに制限はありません（院内LANでOK）。<br>
+      ・PC再起動でも直らない場合は、端末の「看護アシスタント（自動起動）」が停止している可能性があります。<br>
+      ・サポートに「ローカルサーバの自動起動を確認してください」とお伝えください。
+    </div>
   </section>
 </div>
+
 <script>
-const box=document.getElementById('status');
-document.getElementById('start').addEventListener('click',()=>{
-  setTimeout(()=>{ box.innerHTML="起動の反応がない場合、初期設定が未適用の可能性があります。院内サポートへご連絡ください。"; box.classList.remove('hidden'); },1200);
-});
+const BADGE=document.getElementById('badge');
+const MSG=document.getElementById('msg');
+const HELP=document.getElementById('help');
+const PORT=8787;
+const HEALTH=`http://127.0.0.1:${PORT}/ai/health`;
+const TARGET=`http://127.0.0.1:${PORT}/`;
+
+function setBadge(kind,text){
+  BADGE.className='badge '+kind;
+  BADGE.textContent=text;
+}
+async function ping(){
+  try{
+    const c = await fetch(HEALTH,{mode:'no-cors',cache:'no-store'}); // no-corsでも到達＝起動の目安
+    // 到達した時点で遷移（レスポンス内容はno-corsなので見ない）
+    setBadge('ok','接続OK');
+    MSG.textContent='接続できました。画面を開きます…';
+    location.href = TARGET;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
+// すぐに連打ポーリング（最大 ~20秒）
+let attempts=0, max=40;
+(async function auto(){
+  setBadge('spin','接続待機中');
+  MSG.textContent='ローカルを探しています…';
+  let ok=false;
+  while(attempts++<max){
+    ok = await ping();
+    if(ok) return;
+    await new Promise(r=>setTimeout(r,500));
+  }
+  setBadge('ng','未接続');
+  MSG.textContent='見つかりませんでした。「▶ はじめる」を押しても開けない場合は端末側の起動が止まっています。';
+  HELP.classList.remove('hidden');
+})();
 </script>
 </body>
 </html>
