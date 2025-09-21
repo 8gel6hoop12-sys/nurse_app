@@ -5,71 +5,94 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>看護アシスタント – はじめる</title>
 <style>
-:root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb;--text:#2e2a2f}
+:root{
+  --line:#e9c7d5; --accent:#f59bc0; --bg:#fff8fb; --text:#2e2a2f;
+  --ink:#241b22; --sub:#74636f;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
-.wrap{max-width:900px;margin:36px auto;padding:20px;border:1px solid var(--line);border-radius:14px;background:#fff}
-h1{margin:0 0 10px}
-.badge{display:inline-block;background:#ffdce6;color:#9d174d;border-radius:999px;padding:2px 10px;font-weight:800;margin-left:8px}
-.hero{background:#fff8fc;border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
-.hero h2{margin:0 0 6px}
-.btn{display:inline-block;padding:12px 16px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none}
-.btn.ghost{background:#fff;border:1px solid var(--line);color:#333}
-.small{color:#74636f}
-.note{border:1px dashed var(--line);padding:10px;border-radius:10px;background:#fffafc;margin-top:10px}
+body{margin:0;background:var(--bg);color:var(--text);
+     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
+     "Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif;}
+.wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);
+      border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12);}
+.header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.title{display:flex;align-items:center;gap:10px}
+h1{margin:0;font-size:22px;color:#4a3b44}
+.badge{font-weight:800;background:#ffdce6;color:#9d174d;border-radius:999px;padding:4px 12px}
+.hero{margin-top:14px;border:1px solid var(--line);border-radius:14px;background:#fff8fc;
+      padding:22px 18px}
+.hero h2{margin:4px 0 10px;font-size:36px;letter-spacing:.02em;color:var(--ink)}
+.hero p.main{margin:0;font-size:18px;line-height:1.7;color:#3a3036}
+.hero p.sub{margin:8px 0 0;font-size:14px;color:var(--sub)}
+.cta{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-block;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);
+     color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
+.btn:hover{filter:brightness(1.03)}
+.note{margin-top:16px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
+.small{font-size:12px;color:#8a7b84}
+.footer{margin-top:18px;text-align:center}
 .hidden{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>看護アシスタント <span class="badge">プライバシー厳守</span></h1>
-
-  <div class="hero">
-    <h2>いつもお疲れさまです 🩺</h2>
-    <p id="greet">今日も少しでも手間を減らせるよう、AIがそっとお手伝いします。</p>
-    <p class="small">このアプリは<strong>患者データをクラウドに送信せず</strong>、PCの中だけで処理します。安心してご利用ください。</p>
-    <p style="margin-top:12px">
-      <a id="btnOpen" class="btn" href="nurseapp://open">▶ はじめる</a>
-      <a id="btnHelp" class="btn ghost" href="#setup">初回セットアップ</a>
-    </p>
+  <div class="header">
+    <div class="title">
+      <h1>看護アシスタント</h1>
+      <span class="badge">プライバシー配慮</span>
+    </div>
   </div>
 
-  <div id="statusBox" class="note hidden"></div>
+  <section class="hero" aria-label="greeting">
+    <h2 id="hello">いつもお疲れさまです</h2>
+    <p id="line1" class="main">現場の流れをできるだけそのままに、入力と確認をすっと進められるように整えています。</p>
+    <p id="line2" class="main">必要なときだけ、そっと支える相棒としてお使いください。</p>
+    <p class="sub small">※ このツールは端末内で動作し、記録や画像などが外部へ送られることはありません。</p>
 
-  <h3 id="setup">初回セットアップ（1回だけ）</h3>
-  <ol>
-    <li>配布された <strong>nurse_app.zip</strong> を解凍します。</li>
-    <li>解凍フォルダで <code>python launch_nurse.py --register</code> を実行して登録します。<br>
-      <span class="small">（管理側が exe を配布している場合は <code>launch_nurse.exe --register</code> でもOK）</span>
-    </li>
-    <li>以後はこのページの「▶ はじめる」を押すだけで起動します。</li>
-  </ol>
+    <div class="cta">
+      <a id="btnOpen" class="btn" href="nurseapp://open">▶ はじめる</a>
+    </div>
 
-  <h3>動かないときは</h3>
-  <ul>
-    <li>ボタンを押しても反応が無い → 上の「初回セットアップ」をもう一度。</li>
-    <li>ブラウザが確認ダイアログを出す → 「許可する」を選択。</li>
-    <li>それでも難しい → 院内ITに連絡してください。</li>
-  </ul>
+    <div id="status" class="note hidden"></div>
+  </section>
+
+  <div class="footer small">
+    うまく開かない場合は院内サポートへご連絡ください。
+  </div>
 </div>
 
 <script>
-const msgs = [
-  "適度に肩の力を抜いて、必要なところをAIに任せてくださいね。",
-  "今日も記録作成や確認をできるだけ時短で。サポートします。",
-  "忙しい時間帯こそ、ミスなく効率よく。私たちに任せてください。",
-  "あなたのケアが患者さんの安心につながっています。AIもお手伝いします。"
+/* 毎回すこしだけ言い回しを変える（“AI”という語は使わない） */
+const hello = [
+  "いつもお疲れさまです",
+  "本日もありがとうございます",
+  "忙しい時間帯も、無理なくいきましょう",
+  "あなたのケアが安心につながっています"
 ];
-document.getElementById("greet").textContent = msgs[Math.floor(Math.random()*msgs.length)];
+const lines1 = [
+  "手書き・入力・確認のひと手間を軽くして、いつもの記録づくりを支えます。",
+  "S/Oの流れや診断候補の見方はこれまで通り。迷わず進められるよう整えています。",
+  "必要な情報だけをまとめて扱いやすく。負担を少しでも減らせますように。",
+  "ボタンは少なく、次にすることがすぐ分かる配置にしています。"
+];
+const lines2 = [
+  "中断や再開もしやすい設計です。必要な時だけ、気軽にどうぞ。",
+  "画面は大きめ・文字は見やすく。クリックで拡大表示もできます。",
+  "写真やファイルからの取り込みにも対応しています。",
+  "そっと寄り添う道具として、肩の力を抜いて使ってください。"
+];
+const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+document.getElementById('hello').textContent = pick(hello);
+document.getElementById('line1').textContent = pick(lines1);
+document.getElementById('line2').textContent = pick(lines2);
 
-const statusBox = document.getElementById('statusBox');
-function showStatus(msg){ statusBox.innerHTML = msg; statusBox.classList.remove('hidden'); }
-
+/* 起動ボタンを押しても反応が無い場合の案内（セットアップ説明は出さない） */
+const statusBox = document.getElementById('status');
+const showStatus = (msg) => { statusBox.innerHTML = msg; statusBox.classList.remove('hidden'); };
 document.getElementById('btnOpen').addEventListener('click', ()=>{
-  // nurseapp:// が未登録だと何も起きない。念のためメッセージを出す
   setTimeout(()=>{
-    showStatus("反応が無い場合は <strong>初回セットアップ</strong> を実施してください。<br>「nurseapp://open」を開くための登録が必要です。");
-  }, 800);
+    showStatus("反応がない場合は院内サポートへご連絡ください。端末側の起動設定を確認します。");
+  }, 900);
 });
 </script>
 </body>
