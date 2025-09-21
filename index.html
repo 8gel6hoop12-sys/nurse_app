@@ -5,94 +5,45 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>看護アシスタント – はじめる</title>
 <style>
-:root{
-  --line:#e9c7d5; --accent:#f59bc0; --bg:#fff8fb; --text:#2e2a2f;
-  --ink:#241b22; --sub:#74636f;
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);
-     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
-     "Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif;}
-.wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);
-      border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12);}
-.header{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.title{display:flex;align-items:center;gap:10px}
-h1{margin:0;font-size:22px;color:#4a3b44}
-.badge{font-weight:800;background:#ffdce6;color:#9d174d;border-radius:999px;padding:4px 12px}
-.hero{margin-top:14px;border:1px solid var(--line);border-radius:14px;background:#fff8fc;
-      padding:22px 18px}
-.hero h2{margin:4px 0 10px;font-size:36px;letter-spacing:.02em;color:var(--ink)}
-.hero p.main{margin:0;font-size:18px;line-height:1.7;color:#3a3036}
-.hero p.sub{margin:8px 0 0;font-size:14px;color:var(--sub)}
-.cta{margin-top:18px;display:flex;gap:12px;flex-wrap:wrap}
-.btn{display:inline-block;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);
-     color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
-.btn:hover{filter:brightness(1.03)}
-.note{margin-top:16px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
-.small{font-size:12px;color:#8a7b84}
-.footer{margin-top:18px;text-align:center}
+:root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb;--ink:#241b22;--sub:#74636f}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:#2e2a2f;
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
+.wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12)}
+.hero{border:1px solid var(--line);border-radius:14px;background:#fff8fc;padding:22px 18px}
+.hero h2{margin:0 0 8px;font-size:38px;color:var(--ink)}
+.hero p.main{margin:0 0 6px;font-size:18px;line-height:1.7}
+.hero p.sub{margin:12px 0 0;font-size:12px;color:var(--sub)}
+.btn{display:inline-block;margin-top:16px;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
+.note{margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
 .hidden{display:none}
+.small{font-size:12px;color:#8a7b84}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="header">
-    <div class="title">
-      <h1>看護アシスタント</h1>
-      <span class="badge">プライバシー配慮</span>
-    </div>
-  </div>
-
   <section class="hero" aria-label="greeting">
     <h2 id="hello">いつもお疲れさまです</h2>
-    <p id="line1" class="main">現場の流れをできるだけそのままに、入力と確認をすっと進められるように整えています。</p>
-    <p id="line2" class="main">必要なときだけ、そっと支える相棒としてお使いください。</p>
-    <p class="sub small">※ このツールは端末内で動作し、記録や画像などが外部へ送られることはありません。</p>
+    <p class="main">ふだんの流れをそのままに、入力と確認がすっと終わるよう整えています。</p>
+    <p class="main">必要なときだけ静かに支えます。肩の力を抜いてご利用ください。</p>
+    <p class="sub">※ このツールは端末内で動作します。記録や画像が外部へ送られることはありません。</p>
 
-    <div class="cta">
-      <a id="btnOpen" class="btn" href="nurseapp://open">▶ はじめる</a>
-    </div>
+    <!-- スタート：カスタムプロトコル -->
+    <a id="startBtn" class="btn" href="nurseapp://start">▶ スタート</a>
 
+    <!-- 反応が無い時の案内を自動表示 -->
     <div id="status" class="note hidden"></div>
+    <p class="small">うまく起動しない場合は院内サポートまでお知らせください。</p>
   </section>
-
-  <div class="footer small">
-    うまく開かない場合は院内サポートへご連絡ください。
-  </div>
 </div>
 
 <script>
-/* 毎回すこしだけ言い回しを変える（“AI”という語は使わない） */
-const hello = [
-  "いつもお疲れさまです",
-  "本日もありがとうございます",
-  "忙しい時間帯も、無理なくいきましょう",
-  "あなたのケアが安心につながっています"
-];
-const lines1 = [
-  "手書き・入力・確認のひと手間を軽くして、いつもの記録づくりを支えます。",
-  "S/Oの流れや診断候補の見方はこれまで通り。迷わず進められるよう整えています。",
-  "必要な情報だけをまとめて扱いやすく。負担を少しでも減らせますように。",
-  "ボタンは少なく、次にすることがすぐ分かる配置にしています。"
-];
-const lines2 = [
-  "中断や再開もしやすい設計です。必要な時だけ、気軽にどうぞ。",
-  "画面は大きめ・文字は見やすく。クリックで拡大表示もできます。",
-  "写真やファイルからの取り込みにも対応しています。",
-  "そっと寄り添う道具として、肩の力を抜いて使ってください。"
-];
-const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-document.getElementById('hello').textContent = pick(hello);
-document.getElementById('line1').textContent = pick(lines1);
-document.getElementById('line2').textContent = pick(lines2);
-
-/* 起動ボタンを押しても反応が無い場合の案内（セットアップ説明は出さない） */
-const statusBox = document.getElementById('status');
-const showStatus = (msg) => { statusBox.innerHTML = msg; statusBox.classList.remove('hidden'); };
-document.getElementById('btnOpen').addEventListener('click', ()=>{
+const statusBox=document.getElementById('status');
+function show(msg){statusBox.innerHTML=msg;statusBox.classList.remove('hidden');}
+document.getElementById('startBtn').addEventListener('click',()=>{
+  // プロトコル未登録で反応が無い場合に数秒後メッセージ
   setTimeout(()=>{
-    showStatus("反応がない場合は院内サポートへご連絡ください。端末側の起動設定を確認します。");
-  }, 900);
+    show("起動の反応がない場合、端末側の設定が必要です。<br>院内サポートが登録しますのでご連絡ください。");
+  }, 1200);
 });
 </script>
 </body>

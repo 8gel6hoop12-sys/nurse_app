@@ -1,139 +1,86 @@
 # -*- coding: utf-8 -*-
 """
-launch_nurse.py — 看護アプリ起動ランチャ（URLスキーム登録つき・Windows向け）
+launch_nurse.py — URLスキーム登録 & 起動ランチャ（Windows向け）
 使い方:
-  初回1回だけ  : python launch_nurse.py --register
-  以後いつでも : nurseapp://open をクリック / python launch_nurse.py
-オプション:
-  --unregister     スキームの解除
-  --reinstall      再登録（上書き）
-  --port 8787      ポート変更（既定 8787）
+  (管理側/初回のみ)  python launch_nurse.py --register
+  (ユーザー操作)      GitHub Pages の「▶ スタート」→ nurseapp://start → 本体起動
 """
 from __future__ import annotations
-import os, sys, time, webbrowser, subprocess, platform, argparse, shutil
+import os, sys, subprocess, platform, argparse, time
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
-PORT    = int(os.environ.get("NURSE_PORT", "8787"))
-HOST    = "127.0.0.1"
-URL     = f"http://{HOST}:{PORT}"
+NURSE_MAIN = APP_DIR / "nurse_app.py"   # 本体（PyQt）
 
-def _ping(path="/ai/health", timeout=0.7) -> bool:
-    try:
-        import urllib.request
-        with urllib.request.urlopen(f"{URL}{path}", timeout=timeout) as r:
-            return r.status == 200
-    except Exception:
-        return False
-
-def _spawn_server(port: int):
-    """nurse_server.py をバックグラウンド起動（コンソール非表示）"""
-    srv = APP_DIR / "nurse_server.py"
-    if not srv.exists():
-        raise RuntimeError(f"{srv.name} が見つかりません（{APP_DIR}）")
-
-    py = sys.executable
-    kwargs = {}
+def _spawn_main():
+    if not NURSE_MAIN.exists():
+        raise FileNotFoundError(f"{NURSE_MAIN.name} が見つかりません")
+    kwargs={}
     if platform.system().lower().startswith("win"):
-        DETACHED_PROCESS = 0x00000008
-        CREATE_NO_WINDOW = 0x08000000
-        kwargs["creationflags"] = DETACHED_PROCESS | CREATE_NO_WINDOW
-    else:
-        kwargs["start_new_session"] = True
-
-    env = os.environ.copy()
+        DETACHED=0x00000008  # DETACHED_PROCESS
+        NOWIN=0x08000000     # CREATE_NO_WINDOW
+        kwargs["creationflags"]=DETACHED|NOWIN
+    env=os.environ.copy()
+    # 本体側で既にプライバシー徹底(OLLAMA固定/OpenAI無効)をしているため、
+    # 念のため同じ環境も渡しておく（無くても本体で上書きされる）
     env.update({
-        "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1",
-        # プライバシー徹底: OpenAIは空、Ollama固定
-        "AI_PROVIDER": "ollama",
-        "AI_LOG_DISABLE": "1",
-        "OPENAI_API_KEY": "",
-        "AI_MODEL": env.get("AI_MODEL", "qwen2.5:7b-instruct"),
-        "OLLAMA_HOST": env.get("OLLAMA_HOST", "http://127.0.0.1:11434"),
-        "NURSE_PORT": str(port),
+        "PYTHONUTF8":"1","PYTHONIOENCODING":"utf-8",
+        "AI_PROVIDER":"ollama","AI_LOG_DISABLE":"1","OPENAI_API_KEY":"",
+        "AI_MODEL":env.get("AI_MODEL","qwen2.5:7b-instruct"),
+        "OLLAMA_HOST":env.get("OLLAMA_HOST","http://127.0.0.1:11434"),
     })
+    subprocess.Popen([sys.executable,"-X","utf8",str(NURSE_MAIN)],
+                     cwd=str(APP_DIR), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, **kwargs)
 
-    subprocess.Popen(
-        [py, "-X", "utf8", str(srv), "--host", HOST, "--port", str(port)],
-        cwd=str(APP_DIR),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env=env,
-        **kwargs,
-    )
-
-def open_ui(port: int):
-    """サーバが無ければ起動→立ち上がったらブラウザで開く"""
-    global URL
-    URL = f"http://{HOST}:{port}"
-    if not _ping():
-        _spawn_server(port)
-        # 起動待ち（最大 ~20秒）
-        for _ in range(100):
-            if _ping():
-                break
-            time.sleep(0.2)
-    webbrowser.open(f"{URL}/", new=2)
-
-# ---------- URLスキーム登録（管理者権限いらない HKCU を使用） ----------
+# ---- Windows: nurseapp:// スキーム登録（HKCU）
 def _register_scheme():
-    if not platform.system().lower().startswith("win"):
-        print("Windows以外は登録不要/非対応です。"); return
-
+    if platform.system().lower()!="windows":
+        print("Windows以外の自動登録は対象外です（手動でアプリ化が必要）")
+        return
     import winreg
-    # HKCU\Software\Classes\nurseapp\shell\open\command
-    base = r"Software\Classes\nurseapp"
-    exe  = sys.executable
-    target = f'"{exe}" -X utf8 "{str(Path(__file__).resolve())}"'
+    base=r"Software\Classes\nurseapp"
+    # URLを受け取ったとき、このスクリプトを実行
+    target=f'"{sys.executable}" -X utf8 "{str(Path(__file__).resolve())}" "%1"'
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, base) as k:
         winreg.SetValueEx(k, None, 0, winreg.REG_SZ, "URL:NurseApp")
         winreg.SetValueEx(k, "URL Protocol", 0, winreg.REG_SZ, "")
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, base + r"\shell\open\command") as k:
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, base+r"\shell\open\command") as k:
         winreg.SetValueEx(k, None, 0, winreg.REG_SZ, target)
-
-    print("URLスキームを登録しました： nurseapp://open")
-    print("このリンクをクリックすると本アプリが起動します。")
+    print("登録完了: nurseapp://start で起動できます。")
 
 def _unregister_scheme():
-    if not platform.system().lower().startswith("win"):
-        return
+    if platform.system().lower()!="windows": return
     import winreg
     try:
-        base = r"Software\Classes\nurseapp\shell\open\command"
-        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, base)
-        base = r"Software\Classes\nurseapp\shell\open"
-        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, base)
-        base = r"Software\Classes\nurseapp\shell"
-        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, base)
-        base = r"Software\Classes\nurseapp"
-        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, base)
-        print("URLスキーム nurseapp:// を削除しました。")
-    except Exception as e:
-        print("削除に失敗:", e)
+        for sub in [r"shell\open\command", r"shell\open", r"shell", ""]:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\nurseapp\\"+sub if sub else r"Software\Classes\nurseapp")
+        print("スキーム削除完了")
+    except Exception:
+        pass
 
-# ---------- エントリ ----------
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--register",   action="store_true", help="URLスキーム登録")
-    ap.add_argument("--unregister", action="store_true", help="URLスキーム削除")
-    ap.add_argument("--reinstall",  action="store_true", help="登録し直し（削除→登録）")
-    ap.add_argument("--port", type=int, default=PORT)
-    args = ap.parse_args()
+    ap=argparse.ArgumentParser()
+    ap.add_argument("--register",action="store_true", help="nurseapp:// スキーム登録（Windows）")
+    ap.add_argument("--unregister",action="store_true")
+    ap.add_argument("--reinstall",action="store_true")
+    a=ap.parse_args()
 
-    if args.reinstall:
+    if a.reinstall:
         _unregister_scheme(); _register_scheme(); return
-    if args.register:
+    if a.register:
         _register_scheme(); return
-    if args.unregister:
+    if a.unregister:
         _unregister_scheme(); return
 
-    # nurseapp://open から呼ばれた時もここに来る
-    open_ui(args.port)
-
-if __name__ == "__main__":
+    # nurseapp://start などで渡ってくるURLは argv[1] に入ることが多い
+    # ここでは単に受けて本体を起動するだけでOK（引数は使わない）
     try:
-        main()
+        _spawn_main()
     except Exception as e:
-        # 失敗時でも原因がわかるように標準出力へ
-        print("[launch_nurse] error:", e)
+        # コンソールを出さない設計なので、失敗時だけ簡単なフォールバック
+        # （必要ならログに書き出すなど拡張可）
+        sys.stderr.write(f"起動に失敗しました: {e}\n")
         raise
+
+if __name__=="__main__":
+    main()
