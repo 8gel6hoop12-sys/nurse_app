@@ -10,40 +10,34 @@
 font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
 .wrap{max-width:920px;margin:40px auto;padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 14px 30px rgba(245,155,192,.12)}
 .hero{border:1px solid var(--line);border-radius:14px;background:#fff8fc;padding:22px 18px}
-.hero h2{margin:0 0 8px;font-size:38px;color:var(--ink)}
-.hero p.main{margin:0 0 6px;font-size:18px;line-height:1.7}
+.hero h1{margin:0 0 10px;font-size:40px;color:var(--ink)}
+.hero p.lead{margin:0 0 6px;font-size:18px;line-height:1.7}
 .hero p.sub{margin:12px 0 0;font-size:12px;color:var(--sub)}
 .btn{display:inline-block;margin-top:16px;padding:14px 18px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none;letter-spacing:.02em}
 .note{margin-top:14px;border:1px dashed var(--line);border-radius:12px;padding:12px;background:#fffafc;color:#5b4e55}
-.hidden{display:none}
 .small{font-size:12px;color:#8a7b84}
+.hidden{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
   <section class="hero" aria-label="greeting">
-    <h2 id="hello">いつもお疲れさまです</h2>
-    <p class="main">ふだんの流れをそのままに、入力と確認がすっと終わるよう整えています。</p>
-    <p class="main">必要なときだけ静かに支えます。肩の力を抜いてご利用ください。</p>
-    <p class="sub">※ このツールは端末内で動作します。記録や画像が外部へ送られることはありません。</p>
+    <h1>いつもお疲れさまです</h1>
+    <p class="lead">ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。</p>
+    <p class="lead">記録・画像は端末内で完結します。外には出しません。安心してお使いください。</p>
+    <p class="sub">※ 端末は既に院内で準備済みです。下のボタンを押すだけで起動します。</p>
 
-    <!-- スタート：カスタムプロトコル -->
-    <a id="startBtn" class="btn" href="nurseapp://start">▶ スタート</a>
+    <!-- カスタムURLスキーム（部署側で事前登録済み想定） -->
+    <a id="start" class="btn" href="nurseui://start">▶ はじめる</a>
 
-    <!-- 反応が無い時の案内を自動表示 -->
     <div id="status" class="note hidden"></div>
-    <p class="small">うまく起動しない場合は院内サポートまでお知らせください。</p>
+    <p class="small">反応がない場合は院内サポートにご連絡ください。</p>
   </section>
 </div>
-
 <script>
-const statusBox=document.getElementById('status');
-function show(msg){statusBox.innerHTML=msg;statusBox.classList.remove('hidden');}
-document.getElementById('startBtn').addEventListener('click',()=>{
-  // プロトコル未登録で反応が無い場合に数秒後メッセージ
-  setTimeout(()=>{
-    show("起動の反応がない場合、端末側の設定が必要です。<br>院内サポートが登録しますのでご連絡ください。");
-  }, 1200);
+const box=document.getElementById('status');
+document.getElementById('start').addEventListener('click',()=>{
+  setTimeout(()=>{ box.innerHTML="起動の反応がない場合、初期設定が未適用の可能性があります。院内サポートへご連絡ください。"; box.classList.remove('hidden'); },1200);
 });
 </script>
 </body>
