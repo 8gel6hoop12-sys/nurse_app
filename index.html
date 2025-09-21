@@ -3,49 +3,73 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>看護アシスタント – 起動</title>
+<title>看護アシスタント – はじめる</title>
 <style>
-:root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb}
-body{margin:0;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif;color:#2e2a2f}
-.wrap{max-width:960px;margin:40px auto;padding:20px;border:1px solid var(--line);border-radius:12px;background:#fff}
-h1{margin:0 0 12px;font-size:28px}
-.badge{display:inline-block;background:#ffdce6;color:#9d174d;border-radius:999px;padding:2px 10px;font-weight:700;margin-left:8px}
-.btn{display:inline-block;padding:10px 14px;border-radius:10px;border:0;background:var(--accent);color:#fff;font-weight:800;text-decoration:none}
+:root{--line:#e9c7d5;--accent:#f59bc0;--bg:#fff8fb;--text:#2e2a2f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
+.wrap{max-width:900px;margin:36px auto;padding:20px;border:1px solid var(--line);border-radius:14px;background:#fff}
+h1{margin:0 0 10px}
+.badge{display:inline-block;background:#ffdce6;color:#9d174d;border-radius:999px;padding:2px 10px;font-weight:800;margin-left:8px}
+.hero{background:#fff8fc;border:1px solid var(--line);border-radius:12px;padding:16px;margin:12px 0}
+.hero h2{margin:0 0 6px}
+.btn{display:inline-block;padding:12px 16px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-weight:900;text-decoration:none}
 .btn.ghost{background:#fff;border:1px solid var(--line);color:#333}
-.box{border:1px dashed var(--line);padding:12px;border-radius:10px;white-space:pre-wrap;background:#fffafc}
-small{color:#74636f}
-ol li{margin:6px 0}
+.small{color:#74636f}
+.note{border:1px dashed var(--line);padding:10px;border-radius:10px;background:#fffafc;margin-top:10px}
+.hidden{display:none}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>看護アシスタント <span class="badge">プライバシー厳守</span></h1>
-  <p>このページは<strong>入口</strong>です。下の「起動」ボタンを押すと、PC 内のアプリを開きます。</p>
 
-  <h3>起動</h3>
-  <p>
-    <a id="btnOpen" class="btn" href="nurseapp://open">起動（nurseapp://open）</a>
-    <a id="btnHelp" class="btn ghost" href="#howto">初回セットアップ手順</a>
-  </p>
+  <div class="hero">
+    <h2>いつもお疲れさまです 🩺</h2>
+    <p id="greet">今日も少しでも手間を減らせるよう、AIがそっとお手伝いします。</p>
+    <p class="small">このアプリは<strong>患者データをクラウドに送信せず</strong>、PCの中だけで処理します。安心してご利用ください。</p>
+    <p style="margin-top:12px">
+      <a id="btnOpen" class="btn" href="nurseapp://open">▶ はじめる</a>
+      <a id="btnHelp" class="btn ghost" href="#setup">初回セットアップ</a>
+    </p>
+  </div>
 
-  <h3 id="status">状況</h3>
-  <div class="box" id="log">・このURLは院内配布用です。<br>・クリックしても開かない場合は「初回セットアップ手順」を実施してください。</div>
+  <div id="statusBox" class="note hidden"></div>
 
-  <h3 id="howto" style="margin-top:24px">初回セットアップ（1回だけ）</h3>
+  <h3 id="setup">初回セットアップ（1回だけ）</h3>
   <ol>
-    <li>配布された <strong>nurse_app_xxx.zip</strong> をダウンロードして解凍（任意のフォルダOK）。</li>
-    <li>解凍フォルダで <code>python launch_nurse.py --register</code> を実行（URLスキーム登録）。</li>
-    <li>以後はこのページの「起動」ボタンを押すだけで開きます。<br><small>（Pythonが無い場合や配布を簡単にしたい場合は、管理側で exe 化して配布してください：pyinstaller 推奨）</small></li>
+    <li>配布された <strong>nurse_app.zip</strong> を解凍します。</li>
+    <li>解凍フォルダで <code>python launch_nurse.py --register</code> を実行して登録します。<br>
+      <span class="small">（管理側が exe を配布している場合は <code>launch_nurse.exe --register</code> でもOK）</span>
+    </li>
+    <li>以後はこのページの「▶ はじめる」を押すだけで起動します。</li>
   </ol>
 
-  <h3>プライバシーについて</h3>
-  <p>患者データはクラウドへ送信されません。AIはPC内の <code>Ollama</code> のみを使用し、OpenAIキーは無効化されています。</p>
+  <h3>動かないときは</h3>
+  <ul>
+    <li>ボタンを押しても反応が無い → 上の「初回セットアップ」をもう一度。</li>
+    <li>ブラウザが確認ダイアログを出す → 「許可する」を選択。</li>
+    <li>それでも難しい → 院内ITに連絡してください。</li>
+  </ul>
 </div>
 
 <script>
-const log = msg => { const el=document.getElementById('log'); el.innerHTML += "<br>・" + msg; };
+const msgs = [
+  "適度に肩の力を抜いて、必要なところをAIに任せてくださいね。",
+  "今日も記録作成や確認をできるだけ時短で。サポートします。",
+  "忙しい時間帯こそ、ミスなく効率よく。私たちに任せてください。",
+  "あなたのケアが患者さんの安心につながっています。AIもお手伝いします。"
+];
+document.getElementById("greet").textContent = msgs[Math.floor(Math.random()*msgs.length)];
+
+const statusBox = document.getElementById('statusBox');
+function showStatus(msg){ statusBox.innerHTML = msg; statusBox.classList.remove('hidden'); }
+
 document.getElementById('btnOpen').addEventListener('click', ()=>{
-  log("起動リンクを開きました。反応が無ければセットアップを実施してください。");
+  // nurseapp:// が未登録だと何も起きない。念のためメッセージを出す
+  setTimeout(()=>{
+    showStatus("反応が無い場合は <strong>初回セットアップ</strong> を実施してください。<br>「nurseapp://open」を開くための登録が必要です。");
+  }, 800);
 });
 </script>
 </body>
