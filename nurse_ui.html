@@ -5,11 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>看護アシスタント（段階レビュー・Web版）</title>
 <style>
-:root{
-  --bg:#fff8fb;--text:#2e2a2f;--muted:#74636f;
-  --panel:#fff;--line:#e9c7d5;--accent:#f59bc0;--accent2:#f7cfe3;
-  --r:12px; --px:18px
-}
+:root{--bg:#fff8fb;--text:#2e2a2f;--muted:#74636f;--panel:#fff;--line:#e9c7d5;--accent:#f59bc0;--accent2:#f7cfe3;--r:12px;--px:18px}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
@@ -18,14 +14,23 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,B
 .nav{display:flex;gap:8px;margin-left:8px}
 .tab-btn{background:#f4dde6;border:1px solid var(--line);padding:6px 10px;border-radius:10px;cursor:pointer}
 .tab-btn.active{background:#fbe7f1;outline:2px solid #f3c1d8}
-main{padding:12px;max-width:1200px;margin:0 auto}
+.topmenu{margin-left:auto}
+.menu-btn{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px 10px;cursor:pointer}
+.menu-modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:20px;z-index:100}
+.menu-modal.show{display:flex}
+.menu-box{background:#fff;border:1px solid var(--line);border-radius:12px;max-width:720px;width:96vw;max-height:90vh;overflow:auto;padding:14px}
+.menu-box h2{margin:0 0 8px}
+.menu-box .close{float:right;background:#fff;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer}
+
+main{padding:12px;max-width:1400px;margin:0 auto}
 .grid{display:grid;grid-template-columns:1fr;gap:12px}
-@media(min-width:1000px){.grid-2{grid-template-columns:1fr 1fr}}
+@media(min-width:1100px){.grid-2{grid-template-columns:1fr 1fr}}
 .card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:12px}
 h3{margin:6px 0 8px;font-size:16px}
 label{font-size:14px;color:#4b3a45}
 input[type=text],textarea{width:100%;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:var(--px)}
-textarea{min-height:160px;resize:vertical}
+textarea{min-height:220px;resize:vertical}
+.bigtext{min-height:480px}
 .s-row,.o-row{display:grid;grid-template-columns:160px 1fr;gap:8px;align-items:center;margin:6px 0}
 .hint{color:var(--muted);font-size:13px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
@@ -45,58 +50,40 @@ pre{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px
 .modal.show{display:flex}
 .small{font-size:12px}
 
-/* テーブル共通（Excel風） */
+/* Excel風テーブル */
 table{width:100%;border-collapse:separate;border-spacing:0}
-th,td{
-  border-right:1px solid #d9d9d9;
-  border-bottom:1px solid #d9d9d9;
-  padding:4px 8px; text-align:left; vertical-align:top;
-  background:#fff; line-height:1.25; height:28px;
-}
-th:first-child, td:first-child{border-left:1px solid #d9d9d9}
+th,td{border-right:1px solid #d9d9d9;border-bottom:1px solid #d9d9d9;padding:4px 8px;text-align:left;vertical-align:top;background:#fff;line-height:1.25;height:28px}
+th:first-child,td:first-child{border-left:1px solid #d9d9d9}
 thead tr:first-child th{border-top:1px solid #d9d9d9}
-thead th{
-  position:sticky; top:0; z-index:1;
-  background:#f5f5f5; font-weight:700;
-}
+thead th{position:sticky;top:0;z-index:1;background:#f5f5f5;font-weight:700}
 tbody tr:nth-child(odd) td{background:#fcfcfc}
-tbody tr:hover td{background:#fff8ff;}
+tbody tr:hover td{background:#fff8ff}
 
-/* NANDA: 表全体ラップ */
+/* NANDA */
 .nanda-toolbar{position:sticky;top:0;z-index:2;background:#fff;padding:8px;border:1px solid #eee;border-radius:8px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
 .nanda-wrap{max-height:75vh;overflow:auto;border:1px solid #ddd;border-radius:8px}
-.nanda-table{font-size:13px; table-layout:fixed;} /* 固定レイアウトでExcel感を出す */
+.nanda-table{font-size:13px;table-layout:fixed}
 .nanda-table.compact th,.nanda-table.compact td{height:24px;padding:3px 6px}
 .nanda-table.dense th,.nanda-table.dense td{height:22px;padding:2px 5px}
-
-/* 診断名は常に全文（折返しOK） */
 td.full .cell-full{white-space:normal;overflow:visible;display:block}
-
-/* 他列は2行でクリップ（…）※td は table-cellのまま、中のdivに制御を任せる */
-.cell-clip{
-  display:-webkit-box; -webkit-box-orient:vertical;
-  overflow:hidden; -webkit-line-clamp:2; white-space:normal;
-}
-
-/* セル拡大ビュー（NANDA背後は残す） */
-.cell-viewer{
-  position:fixed; inset:5vh 5vw; z-index:30; background:#ffffff; border:2px solid #d9b5c5; border-radius:12px;
-  box-shadow:0 10px 40px rgba(0,0,0,.25); display:none; padding:12px;
-}
+.cell-clip{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;-webkit-line-clamp:2;white-space:normal}
+.cell-viewer{position:fixed;inset:5vh 5vw;z-index:30;background:#ffffff;border:2px solid #d9b5c5;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.25);display:none;padding:12px}
 .cell-viewer.show{display:block}
-.cell-viewer .head{display:flex;align-items:center;gap:10px;justify-content:space-between; border-bottom:1px solid #eee; padding-bottom:6px; margin-bottom:8px}
+.cell-viewer .head{display:flex;align-items:center;gap:10px;justify-content:space-between;border-bottom:1px solid #eee;padding-bottom:6px;margin-bottom:8px}
 .cell-viewer .close{background:#fff;border:1px solid #ddd;border-radius:8px;padding:4px 10px;cursor:pointer}
-.cell-viewer .content{white-space:pre-wrap; overflow:auto; max-height:70vh; font-size:16px}
+.cell-viewer .content{white-space:pre-wrap;overflow:auto;max-height:70vh;font-size:16px}
 
-/* カメラモーダル */
-.cam-modal{position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; z-index:50; padding:12px}
+/* カメラ */
+.cam-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:12px}
 .cam-modal.show{display:flex}
-.cam-box{background:#000;border-radius:12px; overflow:hidden; max-width:96vw; width:720px}
-.cam-toolbar{display:flex;gap:8px; align-items:center; justify-content:space-between; padding:8px 10px; background:#111; color:#fff}
-.cam-video-wrap{position:relative; background:#000}
-video#cam{width:100%; height:auto; background:#000}
-.cam-btn{background:#fefefe; border:0; border-radius:999px; padding:10px 14px; font-weight:700; cursor:pointer}
-.cam-btn.sec{background:#ddd}
+.cam-box{background:#000;border-radius:12px;overflow:hidden;max-width:96vw;width:720px}
+.cam-toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 10px;background:#111;color:#fff}
+.cam-video-wrap{position:relative;background:#000}
+video#cam{width:100%;height:auto;background:#000}
+.cam-btn{background:#fefefe;border:0;border-radius:999px;padding:10px 14px;font-weight:700;cursor:pointer}
+
+/* 診断枠を拡大 */
+#diagList,#diagDetail,#diagSelected{min-height:360px}
 </style>
 </head>
 <body>
@@ -108,34 +95,54 @@ video#cam{width:100%; height:auto; background:#000}
     <button class="tab-btn" data-tab="t3">3) 記録</button>
     <button class="tab-btn" data-tab="t4">4) 計画</button>
   </nav>
+  <div class="topmenu">
+    <button id="btnMenu" class="menu-btn">☰ メニュー</button>
+  </div>
 </header>
+
+<!-- メニュー（説明 & HowTo & 自動進行トグル） -->
+<div id="menuModal" class="menu-modal" aria-hidden="true">
+  <div class="menu-box" role="dialog" aria-modal="true">
+    <button id="menuClose" class="close">×</button>
+    <h2>このアプリについて</h2>
+    <p><strong>プライバシー厳守</strong>：このアプリはクラウドに患者情報を送信しません。AIはPC内の <code>Ollama</code>（ローカル）だけを利用し、<code>OPENAI_API_KEY</code> を無効化しています。</p>
+    <h3>How to</h3>
+    <ol>
+      <li>NANDAを参照（クリックでセル拡大）。</li>
+      <li>S/O入力（テンプレ or 自由）。写真/ファイルを取り込むとAIが各欄へ自動仕分け。必要に応じて修正。</li>
+      <li>「アセスメント作成」→結果確認→「保存」。</li>
+      <li>保存後、自動で次工程へ移動して実行（下のトグルで切替）。</li>
+    </ol>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <input id="autoNextToggle" type="checkbox" checked>
+      保存後に自動で次工程へ進む（実行まで）
+    </label>
+  </div>
+</div>
 
 <main class="tabs">
 
   <!-- 1) アセスメント -->
   <section id="t1" class="tab active">
     <div class="card">
-      <div class="hint">S / O を入力して「アセスメント作成」を押します。止めたい時は「中止」。NANDAは右のボタンから大きく表示できます。</div>
+      <div class="hint">S / O を入力して「アセスメント作成」。止めたい時は「中止」。NANDAは右のボタンから閲覧できます。</div>
       <div class="actions" style="gap:12px">
         <button id="btnNanda" class="ghost">NANDA（大きく開く）</button>
         <label class="small" style="display:flex;align-items:center;gap:6px">
           <input id="toggleSO" type="checkbox" checked> S/Oテンプレを使う（OFFで自由入力）
         </label>
-
-        <!-- スマホ向けカメラ＆ギャラリー/ファイル -->
         <button id="btnCamOpen" class="ghost">カメラ</button>
         <button id="btnGallery" class="ghost">画像を選ぶ</button>
         <button id="btnFile" class="ghost">ファイルから追加</button>
         <input id="pickGallery" type="file" accept="image/*" style="display:none">
         <input id="pickFile" type="file" accept=".xlsx,.csv,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,image/*" style="display:none">
-
         <span id="assessBadge" class="badge">待機中</span>
         <button id="btnAssessCancel" class="ghost">中止</button>
       </div>
     </div>
 
     <div id="soForm" class="grid grid-2">
-      <!-- S テンプレ -->
+      <!-- Sテンプレ -->
       <div class="card so-templ">
         <h3>S（主観）</h3>
         <div class="s-row"><label>主訴</label><input id="s_shuso" placeholder="例）息苦しくて眠れない"></div>
@@ -149,8 +156,7 @@ video#cam{width:100%; height:auto; background:#000}
         <div class="s-row"><label>思考</label><input id="s_think" placeholder="例）患者の考え / 宗教的背景など"></div>
         <div class="s-row"><label>その他</label><input id="s_etc" placeholder="自由記載"></div>
       </div>
-
-      <!-- O テンプレ -->
+      <!-- Oテンプレ -->
       <div class="card so-templ">
         <h3>O（客観）</h3>
         <div class="o-row"><label>名前・性別</label><input id="o_name" placeholder="例）山田太郎、男"></div>
@@ -172,15 +178,14 @@ video#cam{width:100%; height:auto; background:#000}
         <div class="o-row"><label>体重</label><input id="o_weight" placeholder="60kg"></div>
         <div class="o-row"><label>その他</label><input id="o_etc" placeholder="デバイス、創部など"></div>
       </div>
-
-      <!-- 自由入力（テンプレOFF時） -->
+      <!-- 自由入力 -->
       <div class="card so-free" style="display:none">
         <h3>S（自由入力）</h3>
-        <textarea id="s_free" placeholder="自由に記載してください"></textarea>
+        <textarea id="s_free" class="bigtext" placeholder="自由に記載してください"></textarea>
       </div>
       <div class="card so-free" style="display:none">
         <h3>O（自由入力）</h3>
-        <textarea id="o_free" placeholder="自由に記載してください"></textarea>
+        <textarea id="o_free" class="bigtext" placeholder="自由に記載してください"></textarea>
       </div>
     </div>
 
@@ -188,17 +193,19 @@ video#cam{width:100%; height:auto; background:#000}
       <div class="actions">
         <button id="btnAssess" class="primary">アセスメント作成</button>
         <span id="assessHint" class="hint">作成すると下に結果が表示されます。</span>
+        <button id="btnAssessReview">レビュー</button>
         <button id="btnAssessShow">最新結果を表示</button>
         <button id="btnAssessSave">保存</button>
+        <button id="btnAssessCancel" class="ghost">中止</button>
       </div>
-      <pre id="assessOut" aria-live="polite">（ここにアセスメント結果が表示されます）</pre>
+      <pre id="assessOut" aria-live="polite" class="bigtext">（ここにアセスメント結果が表示されます）</pre>
     </div>
   </section>
 
   <!-- 2) 診断 -->
   <section id="t2" class="tab">
     <div class="card">
-      <div class="hint">「診断を作成」を押すと候補が一覧で出ます。必要なものにチェックを入れて保存してください。</div>
+      <div class="hint">「診断を作成」を押すと候補が一覧で出ます。必要なものにチェックを入れて保存してください（AI順位/類似度/スコア表示）。</div>
       <div class="actions">
         <button id="btnDiagRun" class="primary">診断を作成</button>
         <span id="diagBadge" class="badge">待機中</span>
@@ -207,19 +214,21 @@ video#cam{width:100%; height:auto; background:#000}
         <button id="btnDiagSave">保存</button>
         <button id="btnDiagTop" class="ghost">AI上位から一括選択</button>
       </div>
+
       <div class="grid grid-2">
         <div class="card">
           <h3>候補一覧</h3>
-          <div id="diagList" class="small">（診断候補がここに表示されます）</div>
+          <div id="diagList" class="small" style="overflow:auto; max-height:60vh;">（診断候補がここに表示されます）</div>
         </div>
         <div class="card">
           <h3>候補の詳細</h3>
-          <pre id="diagDetail" class="small" style="min-height:160px"></pre>
+          <pre id="diagDetail" class="small bigtext"></pre>
         </div>
       </div>
+
       <div class="card">
         <h3>選択中（保存対象）</h3>
-        <pre id="diagSelected" style="min-height:140px">（チェックした候補がここに表示されます）</pre>
+        <pre id="diagSelected" class="bigtext">（チェックした候補がここに表示されます）</pre>
       </div>
     </div>
   </section>
@@ -227,42 +236,44 @@ video#cam{width:100%; height:auto; background:#000}
   <!-- 3) 記録 -->
   <section id="t3" class="tab">
     <div class="card">
-      <div class="hint">「記録を作成」を押すと下に文章が出ます。内容を確認して編集し、「保存」を押してください。止めたい時は「中止」。</div>
+      <div class="hint">「記録を作成」を押すと下に文章が出ます。内容を確認して編集し、「レビュー」で整えてから「保存」を押してください。止めたい時は「中止」。</div>
       <div class="actions">
         <button id="btnRecRun" class="primary">記録を作成</button>
         <span id="recBadge" class="badge">待機中</span>
-        <button id="btnRecCancel" class="ghost">中止</button>
+        <button id="btnRecReview">レビュー</button>
         <button id="btnRecShow">最新結果を表示</button>
         <button id="btnRecSave">保存</button>
+        <button id="btnRecCancel" class="ghost">中止</button>
       </div>
-      <textarea id="recOut" placeholder="記録の内容が表示されます。ご自身で確認して編集し、保存を押してください。"></textarea>
+      <textarea id="recOut" class="bigtext" placeholder="記録の内容が表示されます。ご自身で確認して編集して、保存を押してください。"></textarea>
     </div>
   </section>
 
   <!-- 4) 計画 -->
   <section id="t4" class="tab">
     <div class="card">
-      <div class="hint">「計画を作成」を押すと下に案が出ます。必要に応じて編集し、「保存」を押してください。止めたい時は「中止」。</div>
+      <div class="hint">「計画を作成」を押すと下に案が出ます。必要に応じて編集し、「レビュー」で整えてから「保存」を押してください。止めたい時は「中止」。</div>
       <div class="actions">
         <button id="btnPlanRun" class="primary">計画を作成</button>
         <span id="planBadge" class="badge">待機中</span>
-        <button id="btnPlanCancel" class="ghost">中止</button>
+        <button id="btnPlanReview">レビュー</button>
         <button id="btnPlanShow">最新結果を表示</button>
         <button id="btnPlanSave">保存</button>
+        <button id="btnPlanCancel" class="ghost">中止</button>
       </div>
-      <textarea id="planOut" placeholder="看護計画の内容が表示されます。必要に応じて編集し、保存してください。"></textarea>
+      <textarea id="planOut" class="bigtext" placeholder="看護計画の内容が表示されます。必要に応じて編集し、保存してください。"></textarea>
     </div>
   </section>
 
 </main>
 
-<!-- NANDA 閲覧（読み取り専用・セル拡大） -->
+<!-- NANDA 閲覧 -->
 <div id="dlgNanda" class="modal" aria-hidden="true">
   <div class="box" role="dialog" aria-modal="true" aria-label="NANDA閲覧">
     <div class="nanda-toolbar">
       <strong>NANDA（閲覧専用）</strong>
       <input id="nandaSearch" type="text" placeholder="キーワードで絞り込み" style="max-width:320px">
-      <label>拡大率 <input id="nandaZoom" class="nanda-zoom" type="range" min="80" max="160" value="100"> <span id="nandaZoomVal">100%</span></label>
+      <label>拡大率 <input id="nandaZoom" type="range" min="80" max="160" value="100"> <span id="nandaZoomVal">100%</span></label>
       <label>表示密度
         <select id="nandaDensity">
           <option value="">ふつう</option>
@@ -277,7 +288,6 @@ video#cam{width:100%; height:auto; background:#000}
       <table id="nandaTable" class="nanda-table"><thead></thead><tbody></tbody></table>
     </div>
 
-    <!-- セル拡大ビュー（背後がうっすら残る） -->
     <div id="cellViewer" class="cell-viewer" aria-hidden="true">
       <div class="head">
         <div id="cellTitle" class="small" style="color:#555"></div>
@@ -285,18 +295,18 @@ video#cam{width:100%; height:auto; background:#000}
       </div>
       <div id="cellContent" class="content"></div>
     </div>
-    <div class="hint small">※ 表示のみ。編集はできません。診断名は一覧でも全文表示、それ以外は2行まで表示します（クリックで拡大）。</div>
+    <div class="hint small">※ 表示のみ。編集不可。診断名は常に全文表示、それ以外は2行省略（クリックで拡大）。</div>
   </div>
 </div>
 
-<!-- カメラモーダル（getUserMedia） -->
-<div id="camModal" class="cam-modal" aria-hidden="true">
+<!-- カメラ -->
+<div id="camModal" class="modal cam-modal" aria-hidden="true">
   <div class="cam-box">
     <div class="cam-toolbar">
       <div>カメラ</div>
       <div style="display:flex;gap:6px;align-items:center">
-        <button id="btnSwitchCam" class="cam-btn sec">カメラ切替</button>
-        <button id="btnCloseCam" class="cam-btn sec">閉じる</button>
+        <button id="btnSwitchCam" class="cam-btn">カメラ切替</button>
+        <button id="btnCloseCam" class="cam-btn">閉じる</button>
       </div>
     </div>
     <div class="cam-video-wrap">
@@ -308,22 +318,29 @@ video#cam{width:100%; height:auto; background:#000}
   </div>
 </div>
 
-<!-- OCR & 各種ファイル読込 -->
+<!-- ライブラリ -->
 <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <script>
 const $=s=>document.querySelector(s); const $$=s=>Array.from(document.querySelectorAll(s));
-function download(name, text){ const blob=new Blob([text],{type:"text/plain;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
 function setBadge(el, kind, text){ el.className="badge "+(kind||""); el.textContent=text||""; }
 
-/* タブ切替 */
-$$(".tab-btn").forEach(b=>b.addEventListener("click",()=>{
-  $$(".tab-btn").forEach(x=>x.classList.remove("active")); b.classList.add("active");
-  const id=b.dataset.tab; $$(".tab").forEach(t=>t.classList.remove("active")); $("#"+id).classList.add("active");
-}));
+/* タブ制御 */
+function switchTab(id){
+  $$(".tab-btn").forEach(x=>x.classList.toggle("active", x.dataset.tab===id));
+  $$(".tab").forEach(p=>p.classList.toggle("active", p.id===id));
+}
+$$(".tab-btn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
 
-/* S/Oテンプレ ON/OFF */
+/* メニュー */
+$("#btnMenu").addEventListener("click", ()=> $("#menuModal").classList.add("show"));
+$("#menuClose").addEventListener("click", ()=> $("#menuModal").classList.remove("show"));
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") $("#menuModal").classList.remove("show"); });
+let AUTO_NEXT = true;
+$("#autoNextToggle").addEventListener("change", e=> AUTO_NEXT = !!e.target.checked);
+
+/* SOテンプレ ON/OFF */
 $("#toggleSO").addEventListener("change", e=>{
   const on = e.target.checked;
   $$(".so-templ").forEach(x=>x.style.display = on ? "" : "none");
@@ -346,7 +363,8 @@ function buildO(){
     if(g("o_T")) vit.push("T"+g("o_T")); if(g("o_HR")) vit.push("HR"+g("o_HR")); if(g("o_RR")) vit.push("RR"+g("o_RR"));
     if(g("o_SpO2")) vit.push("SpO2 "+g("o_SpO2")+"%");
     const sbp=g("o_SBP"), dbp=g("o_DBP"); if(sbp&&dbp) vit.push("BP "+sbp+"/"+dbp); else if(sbp) vit.push("SBP "+sbp); else if(dbp) vit.push("DBP "+dbp);
-    if(g("o_NRS")) vit.push("NRS "+g("o_NRS")); if(vit.length) xs.push("バイタル: "+vit.join(", "));
+    if(g("o_NRS")) vit.push("NRS "+g("o_NRS"));
+    if(vit.length) xs.push("バイタル: "+vit.join(", "));
     const add=(tag,v)=>{ if(v) xs.push(tag+" "+v); };
     add("名前・性別:", g("o_name")); add("意識:", g("o_awareness")); add("呼吸所見:", g("o_resp")); add("循環/皮膚:", g("o_circ"));
     add("排泄/水分:", g("o_excrete")); add("検査:", g("o_lab")); add("リスク指標:", g("o_risk")); add("活動:", g("o_active"));
@@ -355,90 +373,83 @@ function buildO(){
   } else { return ($("#o_free").value||"").trim() || "O: 客観"; }
 }
 
-/* 読み取り → S/O反映 */
-function fillFromFreeText(text){
-  const t=(text||"").trim(); if(!t) return;
-  if($("#toggleSO").checked){
-    $("#s_shuso").value = $("#s_shuso").value || t.split(/\n/)[0].slice(0,120);
-    $("#s_etc").value = ($("#s_etc").value? $("#s_etc").value+"\n" : "") + t;
-
-    const s=t.replace(/[^\S\n]+/g," ");
-    const mT=s.match(/(体温|T)\s*([0-9]+(?:\.[0-9]+)?)/i); if(mT) $("#o_T").value=mT[2];
-    const mHR=s.match(/(HR|脈拍)\s*([0-9]{2,3})/i); if(mHR) $("#o_HR").value=mHR[2];
-    const mRR=s.match(/(RR|呼吸数)\s*([0-9]{1,3})/i); if(mRR) $("#o_RR").value=mRR[2];
-    const mSp=s.match(/(SpO2?|酸素飽和)\s*([0-9]{2,3})/i); if(mSp) $("#o_SpO2").value=mSp[2];
-    const mSBP=s.match(/(?:SBP|収縮期)\s*([0-9]{2,3})/i); if(mSBP) $("#o_SBP").value=mSBP[1];
-    const mDBP=s.match(/(?:DBP|拡張期)\s*([0-9]{2,3})/i); if(mDBP) $("#o_DBP").value=mDBP[1];
-    const mNRS=s.match(/NRS\s*([0-9](?:\/10)?)/i); if(mNRS) $("#o_NRS").value=mNRS[1].replace("/10","");
-    $("#o_etc").value = ($("#o_etc").value? $("#o_etc").value+"\n" : "") + t;
-  }else{
-    $("#s_free").value = ($("#s_free").value? $("#s_free").value+"\n" : "") + t;
-    $("#o_free").value = ($("#o_free").value? $("#o_free").value+"\n" : "") + t;
+/* ===== 取り込み→AI仕分け （/ai/map_so はサーバ側に委譲） ===== */
+async function aiMapSOFromText(text){
+  if(!text || !text.trim()) return;
+  setBadge($("#assessBadge"), "spin", "AIで仕分け中…");
+  try{
+    const resp = await fetch("/ai/map_so",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    const js = await resp.json(); if(!js.ok) throw new Error(js.error||"AI mapping failed");
+    const S = js.mapped.S || {}, O = js.mapped.O || {};
+    if($("#toggleSO").checked){
+      const fill=(id,val)=>{ if(val && !$("#"+id).value) $("#"+id).value = val; };
+      fill("s_shuso",S.shuso); fill("s_keika",S.keika); fill("s_bui",S.bui); fill("s_seishitsu",S.seishitsu);
+      fill("s_inyo",S.inyo); fill("s_zuikan",S.zuikan); fill("s_life",S.life); fill("s_back",S.back);
+      fill("s_think",S.think); if(S.etc) $("#s_etc").value = ($("#s_etc").value?$("#s_etc").value+"\n":"")+S.etc;
+      fill("o_name",O.name); fill("o_T",O.T); fill("o_HR",O.HR); fill("o_RR",O.RR); fill("o_SpO2",O.SpO2);
+      fill("o_SBP",O.SBP); fill("o_DBP",O.DBP); fill("o_NRS",O.NRS); fill("o_awareness",O.awareness);
+      fill("o_resp",O.resp); fill("o_circ",O.circ); fill("o_excrete",O.excrete); fill("o_lab",O.lab);
+      fill("o_risk",O.risk); fill("o_active",O.active); fill("o_high",O.high); fill("o_weight",O.weight);
+      if(O.etc) $("#o_etc").value = ($("#o_etc").value?$("#o_etc").value+"\n":"")+O.etc;
+    }else{
+      $("#s_free").value = ($("#s_free").value? $("#s_free").value+"\n" : "") + text;
+      $("#o_free").value = ($("#o_free").value? $("#o_free").value+"\n" : "") + text;
+    }
+    setBadge($("#assessBadge"), "done", "読み取り完了");
+  }catch(err){
+    console.error(err);
+    setBadge($("#assessBadge"), "err", "AI失敗 → 生テキスト反映");
+    if($("#toggleSO").checked){
+      $("#s_etc").value = ($("#s_etc").value? $("#s_etc").value+"\n" : "") + text;
+      $("#o_etc").value = ($("#o_etc").value? $("#o_etc").value+"\n" : "") + text;
+    }else{
+      $("#s_free").value = ($("#s_free").value? $("#s_free").value+"\n" : "") + text;
+      $("#o_free").value = ($("#o_free").value? $("#o_free").value+"\n" : "") + text;
+    }
   }
 }
 
-/* OCR（画像→S/O） */
+/* OCR / ファイル入力 */
 async function ocrFromImage(file){
-  if(!window.Tesseract){ alert("写真の読み取りライブラリを読み込めませんでした。"); return; }
+  if(!window.Tesseract){ alert("写真の読み取りライブラリが読み込めませんでした。"); return; }
   setBadge($("#assessBadge"),"spin","写真から読み取り中…");
-  const { data } = await Tesseract.recognize(file, 'jpn+eng', { logger: m=>{} });
-  fillFromFreeText(data.text||"");
-  setBadge($("#assessBadge"),"done","読み取り完了");
+  const {data} = await Tesseract.recognize(file, 'jpn+eng', {logger:()=>{}});
+  const text = (data.text||"").trim();
+  if(text){ await aiMapSOFromText(text); } else { setBadge($("#assessBadge"),"err","文字が読めません"); }
 }
-
-/* ファイル読み取り */
 async function readFromFile(file){
   const name=(file.name||"").toLowerCase();
-  if(name.endsWith(".txt")){ const t=await file.text(); fillFromFreeText(t); return; }
-  if(name.endsWith(".csv")){
-    try{
-      const buf=await file.arrayBuffer();
-      const wb=XLSX.read(buf,{type:"array"});
-      const sheet=wb.Sheets[wb.SheetNames[0]];
-      const csv=XLSX.utils.sheet_to_csv(sheet);
-      fillFromFreeText(csv);
-    }catch{ fillFromFreeText(await file.text()); }
-    return;
-  }
-  if(name.endsWith(".xlsx") || name.endsWith(".xls")){
+  if(name.endsWith(".txt")){ await aiMapSOFromText(await file.text()); return; }
+  if(name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls")){
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:"array"});
     const sheet=wb.Sheets[wb.SheetNames[0]];
-    const txt=XLSX.utils.sheet_to_csv(sheet);
-    fillFromFreeText(txt);
-    return;
+    const csv=XLSX.utils.sheet_to_csv(sheet);
+    await aiMapSOFromText(csv); return;
   }
   if(name.endsWith(".docx")){
-    const arrayBuffer = await file.arrayBuffer();
-    const res = await window.mammoth.convertToPlainText({arrayBuffer});
-    fillFromFreeText(res.value||"");
-    return;
+    const ab = await file.arrayBuffer();
+    const res = await window.mammoth.convertToPlainText({arrayBuffer:ab});
+    await aiMapSOFromText(res.value||""); return;
   }
   if(file.type.startsWith("image/")){ await ocrFromImage(file); return; }
   alert("対応していないファイル形式です（.xlsx/.csv/.txt/.docx/画像）");
 }
-
-/* スマホカメラ（getUserMedia） */
 let currentStream=null, useFacing="environment";
 async function openCamera(){
-  const supported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  if(!supported){
+  const ok = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  if(!ok){
     const input=document.createElement("input");
     input.type="file"; input.accept="image/*"; input.capture="environment";
-    input.onchange = e=>{ const f=e.target.files?.[0]; if(f) ocrFromImage(f); };
-    input.click();
-    return;
+    input.onchange=e=>{ const f=e.target.files?.[0]; if(f) ocrFromImage(f); };
+    input.click(); return;
   }
-  $("#camModal").classList.add("show");
-  await startStream();
+  $("#camModal").classList.add("show"); await startStream();
 }
 async function startStream(){
   stopStream();
-  try{
-    currentStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: useFacing }, audio:false });
-  }catch(err){
-    currentStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
-  }
+  try{ currentStream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:useFacing}, audio:false }); }
+  catch{ currentStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false }); }
   const v=$("#cam"); v.srcObject=currentStream; await v.play();
 }
 function stopStream(){ if(currentStream){ currentStream.getTracks().forEach(t=>t.stop()); currentStream=null; } }
@@ -446,27 +457,21 @@ $("#btnCamOpen").addEventListener("click", openCamera);
 $("#btnCloseCam").addEventListener("click", ()=>{ $("#camModal").classList.remove("show"); stopStream(); });
 $("#btnSwitchCam").addEventListener("click", async ()=>{ useFacing = (useFacing==="environment")?"user":"environment"; await startStream(); });
 $("#btnShutter").addEventListener("click", async ()=>{
-  const v=$("#cam");
-  const canvas=document.createElement("canvas");
-  const w=v.videoWidth, h=v.videoHeight;
-  canvas.width=w; canvas.height=h;
-  const ctx=canvas.getContext("2d"); ctx.drawImage(v,0,0,w,h);
-  canvas.toBlob(async (blob)=>{ if(blob){ await ocrFromImage(blob); } }, "image/jpeg", 0.92);
+  const v=$("#cam"); const c=document.createElement("canvas"); c.width=v.videoWidth; c.height=v.videoHeight;
+  const ctx=c.getContext("2d"); ctx.drawImage(v,0,0,c.width,c.height);
+  c.toBlob(async (b)=>{ if(b) await ocrFromImage(b); }, "image/jpeg", 0.92);
 });
-
-/* ギャラリー/ファイル */
 $("#btnGallery").addEventListener("click", ()=> $("#pickGallery").click());
 $("#btnFile").addEventListener("click", ()=> $("#pickFile").click());
 $("#pickGallery").addEventListener("change", e=>{ const f=e.target.files?.[0]; if(f) ocrFromImage(f); e.target.value=""; });
 $("#pickFile").addEventListener("change", async e=>{
   const f=e.target.files?.[0]; if(!f) return;
   setBadge($("#assessBadge"),"spin","ファイルを読み取り中…");
-  try{ await readFromFile(f); setBadge($("#assessBadge"),"done","読み取り完了"); }
-  catch(err){ console.error(err); setBadge($("#assessBadge"),"err","失敗"); alert("読み取りに失敗しました"); }
+  try{ await readFromFile(f); }catch(err){ console.error(err); setBadge($("#assessBadge"),"err","失敗"); alert("読み取りに失敗しました"); }
   e.target.value="";
 });
 
-/* アセスメント（非同期・中止） */
+/* 汎用ポーリング */
 async function poll(key, badgeEl, outEl){
   setBadge(badgeEl,"spin","作成中…");
   const timer=setInterval(async ()=>{
@@ -475,129 +480,234 @@ async function poll(key, badgeEl, outEl){
       if(!st.running && st.done){
         clearInterval(timer);
         setBadge(badgeEl, st.rc===0?"done":"err", st.rc===0?"完了":"失敗");
-        outEl.textContent = (st.result||st.stdout||"（結果なし）");
+        if(outEl){
+          outEl.textContent = (st.result || st.stdout || outEl.textContent || "");
+        }
       }
     }catch(e){}
-  }, 500);
+  }, 600);
 }
+
+/* ====== 実行・表示・レビュー ====== */
 $("#btnAssess").addEventListener("click", async ()=>{
   try{
-    await fetch("/run/assessment",{method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({S:buildS(), O:buildO()})});
+    await fetch("/run/assessment",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({S:buildS(),O:buildO()})});
     $("#assessOut").textContent="…作成中です…";
     poll("assessment", $("#assessBadge"), $("#assessOut"));
-  }catch(e){ setBadge($("#assessBadge"),"err","エラー"); }
+  }catch{ setBadge($("#assessBadge"),"err","エラー"); }
 });
 $("#btnAssessCancel").addEventListener("click", async ()=>{ await fetch("/cancel/assessment",{method:"POST"}); setBadge($("#assessBadge"),"", "待機中"); $("#assessOut").textContent="（中止しました）"; });
-$("#btnAssessShow").addEventListener("click", async ()=>{ try{ $("#assessOut").textContent = await fetch("/files/assessment_result.txt").then(r=>r.text()); }catch(e){ $("#assessOut").textContent="取得できませんでした"; } });
-$("#btnAssessSave").addEventListener("click", ()=>{ const t=$("#assessOut").textContent.trim(); if(!t){alert("保存する内容がありません");return;} download("assessment_final.txt", t); });
+$("#btnAssessShow").addEventListener("click", async ()=>{ try{ $("#assessOut").textContent = await fetch("/files/assessment_result.txt").then(r=>r.text()); }catch{ $("#assessOut").textContent="取得できませんでした"; } });
+$("#btnAssessReview").addEventListener("click", async ()=>{
+  const t=$("#assessOut").textContent.trim(); if(!t){ alert("レビュー対象の本文がありません"); return; }
+  setBadge($("#assessBadge"),"spin","レビュー中…");
+  try{
+    const js = await fetch("/review/assessment",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:t})}).then(r=>r.json());
+    if(js.ok){ $("#assessOut").textContent = js.review; setBadge($("#assessBadge"),"done","レビュー完了"); } else { throw new Error(js.error||"review failed"); }
+  }catch(e){ console.error(e); setBadge($("#assessBadge"),"err","失敗"); }
+});
 
-/* 診断（非同期・中止） */
+/* ====== 診断（一覧＋詳細＋選択） ====== */
 let diagCandidates=[]; let diagChecked=new Set();
-function buildDiagBlock(c, idx){ const lines=[`${idx}. [${c.code||""}] ${c.label||""}`]; if(c.definition) lines.push(`    定義: ${c.definition}`); return lines.join("\n"); }
+function fmt(n,d=1){ if(n===undefined||n===null||n==="") return ""; const x=Number(n); if(Number.isNaN(x)) return String(n); return x.toFixed(d); }
+function buildDiagDetail(c, idx){
+  const lines=[];
+  lines.push(`${idx}. [${c.code||""}] ${c.label||""}`);
+  if(c.definition) lines.push(`    定義: ${c.definition}`);
+  const rank = (c.ai_rank!==undefined&&c.ai_rank!=="")? String(c.ai_rank) : "";
+  const sim  = (c.ai_sim!==undefined&&c.ai_sim!=="")? fmt(c.ai_sim,3):"";
+  const sc   = (c.score!==undefined&&c.score!=="")? fmt(c.score,1):"";
+  if(rank || sim || sc) lines.push(`    AI順位: ${rank||"-"} / AI類似度: ${sim||"-"} / スコア: ${sc||"-"}`);
+  if(c.loose){
+    const L=c.loose; const buf=[];
+    if(Array.isArray(L["診断指標"])&&L["診断指標"].length) buf.push("診断指標: "+L["診断指標"].join("・"));
+    if(Array.isArray(L["関連因子"])&&L["関連因子"].length) buf.push("関連因子: "+L["関連因子"].join("・"));
+    if(Array.isArray(L["危険因子"])&&L["危険因子"].length) buf.push("危険因子: "+L["危険因子"].join("・"));
+    if(Array.isArray(L["定義語"])  &&L["定義語"].length)   buf.push("定義語:   "+L["定義語"].join("・"));
+    if(buf.length){ lines.push("    曖昧一致:"); buf.forEach(b=>lines.push("      - "+b)); }
+  }
+  if(Array.isArray(c.reasons)&&c.reasons.length){
+    lines.push("    スコア根拠:"); c.reasons.slice(0,10).forEach(r=>lines.push("      - "+String(r)));
+  }
+  if(c.ai_ev){
+    const ev = String(c.ai_ev).split("\n").map(s=>s.trim()).filter(Boolean);
+    if(ev.length){ lines.push("    AI根拠:"); ev.forEach(s=>lines.push("      "+s)); }
+  }
+  const meta=[]; const addm=(j,k)=>{ const v=c[k]; if(v!==undefined && v!=="") meta.push(`${j}:${v}`); };
+  ["primary_focus","secondary_focus","care_target","anatomical_site","age_min","age_max","clinical_course","diagnosis_state","situational_constraints","domain","class","judge"]
+    .forEach(k=>{ /* mapping name → label */ });
+  addm("一次焦点","primary_focus"); addm("二次焦点","secondary_focus"); addm("ケア対象","care_target");
+  addm("解剖学的部位","anatomical_site"); addm("年齢下限","age_min"); addm("年齢上限","age_max");
+  addm("臨床経過","clinical_course"); addm("診断の状態","diagnosis_state"); addm("状況的制約","situational_constraints");
+  addm("領域","domain"); addm("分類","class"); addm("判断","judge");
+  if(meta.length) lines.push("    メタ情報: "+meta.join(" / "));
+  return lines.join("\n");
+}
 function renderDiagList(){
   const host=$("#diagList"); host.innerHTML="";
   if(!diagCandidates.length){ host.textContent="（候補がまだありません）"; return; }
-  const t=document.createElement("table"); t.innerHTML=`<thead><tr><th>選択</th><th>Code</th><th>診断名</th></tr></thead>`;
+  const t=document.createElement("table");
+  t.innerHTML=`<thead><tr>
+    <th>選択</th><th>AI順位</th><th>AI類似度</th><th>スコア</th><th>Code</th><th>診断名</th>
+  </tr></thead>`;
   const tb=document.createElement("tbody");
   diagCandidates.forEach((c,i)=>{
     const tr=document.createElement("tr");
     const checked=diagChecked.has(i)?"checked":"";
-    tr.innerHTML = `<td><input type="checkbox" data-i="${i}" ${checked}></td><td>${c.code??""}</td><td><button class="ghost small" data-detail="${i}">${c.label??""}</button></td>`;
+    tr.innerHTML=`
+      <td><input type="checkbox" data-i="${i}" ${checked}></td>
+      <td>${c.ai_rank??""}</td>
+      <td>${(c.ai_sim!==undefined&&c.ai_sim!=="")? fmt(c.ai_sim,3):""}</td>
+      <td>${(c.score!==undefined&&c.score!=="")? fmt(c.score,1):""}</td>
+      <td>${c.code??""}</td>
+      <td><button class="ghost small" data-detail="${i}">${c.label??""}</button></td>`;
     tb.appendChild(tr);
   });
   t.appendChild(tb); host.appendChild(t);
-  host.querySelectorAll('input[type="checkbox"]').forEach(chk=>chk.addEventListener("change", e=>{ const i=+e.target.dataset.i; if(e.target.checked) diagChecked.add(i); else diagChecked.delete(i); renderDiagSelected(); }));
-  host.querySelectorAll('button[data-detail]').forEach(btn=>btn.addEventListener("click", e=>{ const i=+e.target.dataset.detail; $("#diagDetail").textContent=buildDiagBlock(diagCandidates[i],1); }));
+  host.querySelectorAll('input[type="checkbox"]').forEach(chk=>chk.addEventListener("change", e=>{
+    const i=+e.target.dataset.i; if(e.target.checked) diagChecked.add(i); else diagChecked.delete(i); renderDiagSelected();
+  }));
+  host.querySelectorAll('button[data-detail]').forEach(btn=>btn.addEventListener("click", e=>{
+    const i=+e.target.dataset.detail; $("#diagDetail").textContent=buildDiagDetail(diagCandidates[i],1);
+  }));
 }
-function renderDiagSelected(){ const sel=[...diagChecked].map((idx,i)=>buildDiagBlock(diagCandidates[idx],i+1)); $("#diagSelected").textContent = sel.length? sel.join("\n\n") : "（チェックした候補がここに表示されます）"; }
-$("#btnDiagRun").addEventListener("click", async ()=>{
+function renderDiagSelected(){
+  const sorted=[...diagChecked].sort((a,b)=>{
+    const ra=Number(diagCandidates[a]?.ai_rank??999999), rb=Number(diagCandidates[b]?.ai_rank??999999); return ra-rb;
+  });
+  const blocks=sorted.map((idx,i)=>buildDiagDetail(diagCandidates[idx], i+1));
+  $("#diagSelected").textContent = blocks.length? blocks.join("\n\n") : "（チェックした候補がここに表示されます）";
+}
+async function runDiagnosis(){
   try{
     setBadge($("#diagBadge"),"spin","診断を作成中…");
     await fetch("/run/diagnosis",{method:"POST"});
+    // 完了待ち
+    while(true){
+      const st = await fetch("/status/diagnosis").then(r=>r.json());
+      if(!st.running){ break; }
+      await new Promise(r=>setTimeout(r,600));
+    }
     const js = await fetch("/files/diagnosis_candidates.json").then(r=>r.json());
-    diagCandidates = (js.candidates||[]).map(c=>({code:c.code,label:c.label,definition:c.definition}));
+    diagCandidates = (js.candidates||[]).map(c=>({
+      code:c.code,label:c.label,definition:c.definition,ai_rank:c.ai_rank,ai_sim:c.ai_sim,score:c.score,
+      reasons:c.reasons,loose:c.loose,primary_focus:c.primary_focus,secondary_focus:c.secondary_focus,care_target:c.care_target,
+      anatomical_site:c.anatomical_site,age_min:c.age_min,age_max:c.age_max,clinical_course:c.clinical_course,diagnosis_state:c.diagnosis_state,
+      situational_constraints:c.situational_constraints,domain:c.domain,class:c.class,judge:c.judge,ai_ev:c.ai_ev
+    }));
+    diagCandidates.sort((a,b)=>(Number(a.ai_rank??999999)-Number(b.ai_rank??999999)));
     diagChecked.clear(); renderDiagList(); renderDiagSelected();
     setBadge($("#diagBadge"),"done","完了");
-  }catch(e){ setBadge($("#diagBadge"),"err","失敗"); }
-});
+  }catch(e){ console.error(e); setBadge($("#diagBadge"),"err","失敗"); }
+}
+$("#btnDiagRun").addEventListener("click", runDiagnosis);
 $("#btnDiagCancel").addEventListener("click", async ()=>{ await fetch("/cancel/diagnosis",{method:"POST"}); setBadge($("#diagBadge"),"", "待機中"); });
-$("#btnDiagShow").addEventListener("click", async ()=>{ try{ const t=await fetch("/files/diagnosis_result.txt").then(r=>r.text()); $("#diagSelected").textContent=t; }catch(e){ $("#diagSelected").textContent="取得できませんでした"; } });
+$("#btnDiagShow").addEventListener("click", async ()=>{ try{ $("#diagSelected").textContent = await fetch("/files/diagnosis_result.txt").then(r=>r.text()); }catch{ $("#diagSelected").textContent="取得できませんでした"; } });
 $("#btnDiagTop").addEventListener("click", ()=>{ const n=Number(prompt("いくつ選びますか？","3"))||0; if(!n) return; diagChecked=new Set(Array.from({length:Math.min(n,diagCandidates.length)},(_,i)=>i)); renderDiagList(); renderDiagSelected(); });
-$("#btnDiagSave").addEventListener("click", ()=>{ const t=$("#diagSelected").textContent.trim(); if(!t){ alert("保存する内容がありません"); return; } download("diagnosis_final.txt", t+"\n"); });
 
-/* 記録（非同期・中止） */
-$("#btnRecRun").addEventListener("click", async ()=>{ try{ setBadge($("#recBadge"),"spin","作成中…"); await fetch("/run/record",{method:"POST"}); poll("record", $("#recBadge"), $("#recOut")); }catch(e){ setBadge($("#recBadge"),"err","失敗"); }});
+/* 記録 */
+$("#btnRecRun").addEventListener("click", async ()=>{ try{ setBadge($("#recBadge"),"spin","作成中…"); await fetch("/run/record",{method:"POST"}); poll("record", $("#recBadge"), $("#recOut")); }catch{ setBadge($("#recBadge"),"err","失敗"); }});
 $("#btnRecCancel").addEventListener("click", async ()=>{ await fetch("/cancel/record",{method:"POST"}); setBadge($("#recBadge"),"", "待機中"); });
-$("#btnRecShow").addEventListener("click", async ()=>{ try{ $("#recOut").value = await fetch("/files/record_result.txt").then(r=>r.text()); }catch(e){ $("#recOut").value="取得できませんでした"; } });
-$("#btnRecSave").addEventListener("click", ()=>{ const t=$("#recOut").value.trim(); if(!t){ alert("保存する内容がありません"); return; } download("record_final.txt", t); });
+$("#btnRecShow").addEventListener("click", async ()=>{ try{ $("#recOut").value = await fetch("/files/record_result.txt").then(r=>r.text()); }catch{ $("#recOut").value="取得できませんでした"; } });
+$("#btnRecReview").addEventListener("click", async ()=>{
+  const t=$("#recOut").value.trim(); if(!t){ alert("レビュー対象の本文がありません"); return; }
+  setBadge($("#recBadge"),"spin","レビュー中…");
+  try{
+    const js = await fetch("/review/record",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:t})}).then(r=>r.json());
+    if(js.ok){ $("#recOut").value = js.review; setBadge($("#recBadge"),"done","レビュー完了"); } else { throw new Error(js.error||"review failed"); }
+  }catch(e){ console.error(e); setBadge($("#recBadge"),"err","失敗"); }
+});
 
-/* 計画（非同期・中止） */
-$("#btnPlanRun").addEventListener("click", async ()=>{ try{ setBadge($("#planBadge"),"spin","作成中…"); await fetch("/run/careplan",{method:"POST"}); poll("careplan", $("#planBadge"), $("#planOut")); }catch(e){ setBadge($("#planBadge"),"err","失敗"); }});
+/* 計画 */
+$("#btnPlanRun").addEventListener("click", async ()=>{ try{ setBadge($("#planBadge"),"spin","作成中…"); await fetch("/run/careplan",{method:"POST"}); poll("careplan", $("#planBadge"), $("#planOut")); }catch{ setBadge($("#planBadge"),"err","失敗"); }});
 $("#btnPlanCancel").addEventListener("click", async ()=>{ await fetch("/cancel/careplan",{method:"POST"}); setBadge($("#planBadge"),"", "待機中"); });
-$("#btnPlanShow").addEventListener("click", async ()=>{ try{ $("#planOut").value = await fetch("/files/careplan_result.txt").then(r=>r.text()); }catch(e){ $("#planOut").value="取得できませんでした"; } });
-$("#btnPlanSave").addEventListener("click", ()=>{ const t=$("#planOut").value.trim(); if(!t){ alert("保存する内容がありません"); return; } download("careplan_final.txt", t); });
+$("#btnPlanShow").addEventListener("click", async ()=>{ try{ $("#planOut").value = await fetch("/files/careplan_result.txt").then(r=>r.text()); }catch{ $("#planOut").value="取得できませんでした"; } });
+$("#btnPlanReview").addEventListener("click", async ()=>{
+  const t=$("#planOut").value.trim(); if(!t){ alert("レビュー対象の本文がありません"); return; }
+  setBadge($("#planBadge"),"spin","レビュー中…");
+  try{
+    const js = await fetch("/review/careplan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:t})}).then(r=>r.json());
+    if(js.ok){ $("#planOut").value = js.review; setBadge($("#planBadge"),"done","レビュー完了"); } else { throw new Error(js.error||"review failed"); }
+  }catch(e){ console.error(e); setBadge($("#planBadge"),"err","失敗"); }
+});
 
-/* NANDA 読み込み：Excel風＋診断名は全文、他列は2行クリップ。クリックでセル拡大 */
+/* ====== 保存（内部保存）＋ 自動で次へ（任意） ====== */
+async function silentSave(kind, text, badgeEl){
+  try{
+    if(badgeEl) setBadge(badgeEl,"spin","保存中…");
+    const js = await fetch("/save/"+kind,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})}).then(r=>r.json());
+    if(!js.ok) throw new Error(js.error||js.message||"save failed");
+    if(badgeEl) setBadge(badgeEl,"done","保存しました");
+    return true;
+  }catch(e){
+    console.error(e); if(badgeEl) setBadge(badgeEl,"err","保存失敗"); alert("保存に失敗しました: "+e.message);
+    return false;
+  }
+}
+function nextOf(kind){ return kind==="assessment"?"diagnosis":kind==="diagnosis"?"record":kind==="record"?"careplan":null; }
+async function autoProceed(kind){
+  if(!AUTO_NEXT) return;
+  const nxt = nextOf(kind); if(!nxt) return;
+  const map = {assessment:"t2", diagnosis:"t3", record:"t4"};
+  switchTab(map[kind] || "t1");
+  // 次工程を自動実行
+  if(nxt==="diagnosis"){ await runDiagnosis(); }
+  if(nxt==="record"){ $("#btnRecRun").click(); }
+  if(nxt==="careplan"){ $("#btnPlanRun").click(); }
+}
+
+/* 保存ボタン */
+$("#btnAssessSave").addEventListener("click", async ()=>{
+  const t=$("#assessOut").textContent.trim(); if(!t){ alert("保存する内容がありません"); return; }
+  const ok = await silentSave("assessment", t, $("#assessBadge"));
+  if(ok) await autoProceed("assessment");
+});
+$("#btnDiagSave").addEventListener("click", async ()=>{
+  const t=$("#diagSelected").textContent.trim();
+  if(!t || t.includes("チェックした候補がここに表示されます")){ alert("保存する内容がありません"); return; }
+  const ok = await silentSave("diagnosis", t, $("#diagBadge"));
+  if(ok) await autoProceed("diagnosis");
+});
+$("#btnRecSave").addEventListener("click", async ()=>{
+  const t=$("#recOut").value.trim(); if(!t){ alert("保存する内容がありません"); return; }
+  const ok = await silentSave("record", t, $("#recBadge"));
+  if(ok) await autoProceed("record");
+});
+$("#btnPlanSave").addEventListener("click", async ()=>{
+  const t=$("#planOut").value.trim(); if(!t){ alert("保存する内容がありません"); return; }
+  const ok = await silentSave("careplan", t, $("#planBadge"));
+  if(ok){ /* 最終工程なので次は無し */ }
+});
+
+/* ====== NANDA（Excel風） ====== */
 async function openNanda(){
   try{
     const buf = await fetch("/nanda.xlsx").then(r=>{ if(!r.ok) throw new Error("nanda_db.xlsx が見つかりません"); return r.arrayBuffer(); });
-    const wb = XLSX.read(buf, {type:"array"});
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet, {header:1, defval:""});
-
-    const table=$("#nandaTable"); const thead=table.querySelector("thead"); const tbody=table.querySelector("tbody");
+    const wb = XLSX.read(buf,{type:"array"}); const sheet = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(sheet,{header:1,defval:""});
+    const table=$("#nandaTable"), thead=table.querySelector("thead"), tbody=table.querySelector("tbody");
     thead.innerHTML=""; tbody.innerHTML="";
-    if(!data.length){ throw new Error("シートにデータがありません"); }
-    const headers=data[0];
-
-    // ヘッダ
-    const trHead=document.createElement("tr");
+    if(!data.length) throw new Error("シートにデータがありません");
+    const headers=data[0]; const trHead=document.createElement("tr");
     headers.forEach(h=>{ const th=document.createElement("th"); th.textContent=h; trHead.appendChild(th); });
     thead.appendChild(trHead);
-
-    // 診断名列の検出
     const diagIdx = headers.findIndex(h=> String(h).includes("診断名") || String(h).includes("診断"));
-
-    // 列幅のExcel感（適度に固定）
-    table.style.tableLayout = "fixed";
-    // 可変だけど診断名は広め
-    // ※好みに応じて個別に th.style.width = "240px" などに調整可能
-
-    // 本体
     data.slice(1).forEach((row,ridx)=>{
       const tr=document.createElement("tr");
       row.forEach((v,cidx)=>{
-        const td=document.createElement("td");
-        const txt=String(v);
-
-        if(cidx===diagIdx){
-          td.className="full";
-          const div=document.createElement("div");
-          div.className="cell-full";
-          div.textContent=txt;
-          td.appendChild(div);
-        }else{
-          const div=document.createElement("div");
-          div.className="cell-clip";
-          div.textContent=txt;
-          td.appendChild(div);
-        }
-
+        const td=document.createElement("td"); const txt=String(v);
+        if(cidx===diagIdx){ td.className="full"; const div=document.createElement("div"); div.className="cell-full"; div.textContent=txt; td.appendChild(div); }
+        else{ const div=document.createElement("div"); div.className="cell-clip"; div.textContent=txt; td.appendChild(div); }
         td.title="クリックで拡大表示";
         td.addEventListener("click", ()=>{
-          const title = `行${ridx+2} / 列${cidx+1}（${headers[cidx]||"無題"}）`;
-          $("#cellTitle").textContent = title;
-          $("#cellContent").textContent = txt || "(空)";
-          $("#cellViewer").classList.add("show");
+          const title=`行${ridx+2} / 列${cidx+1}（${headers[cidx]||"無題"}）`;
+          $("#cellTitle").textContent=title; $("#cellContent").textContent=txt||"(空)"; $("#cellViewer").classList.add("show");
         });
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
     });
-
-    // デフォルト設定
-    table.classList.remove("compact","dense");
-    $("#nandaDensity").value="";
+    table.classList.remove("compact","dense"); $("#nandaDensity").value="";
     $("#nandaZoom").value=100; $("#nandaZoomVal").textContent="100%";
     $("#dlgNanda").classList.add("show");
   }catch(e){ alert(e.message); }
@@ -605,8 +715,7 @@ async function openNanda(){
 $("#btnNanda").addEventListener("click", openNanda);
 $("#nandaClose").addEventListener("click", ()=>$("#dlgNanda").classList.remove("show"));
 $("#nandaSearch").addEventListener("input", e=>{
-  const t=e.target.value.toLowerCase(); const rows=$$("#nandaTable tbody tr");
-  rows.forEach(r=>{
+  const t=e.target.value.toLowerCase(); $$("#nandaTable tbody tr").forEach(r=>{
     const hit = Array.from(r.cells).some(c=>c.textContent.toLowerCase().includes(t));
     r.style.display = hit ? "" : "none";
   });
@@ -616,11 +725,19 @@ $("#nandaDensity").addEventListener("change", e=>{
   if(e.target.value) table.classList.add(e.target.value);
 });
 $("#nandaZoom").addEventListener("input", e=>{
-  const val = Number(e.target.value)||100; $("#nandaZoomVal").textContent = val+"%";
-  $("#nandaTable").style.fontSize = (13*val/100)+"px";
+  const val=Number(e.target.value)||100; $("#nandaZoomVal").textContent=val+"%";
+  $("#nandaTable").style.fontSize=(13*val/100)+"px";
 });
 $("#cellClose").addEventListener("click", ()=> $("#cellViewer").classList.remove("show"));
-document.addEventListener("keydown", (e)=>{ if(e.key==="Escape") $("#cellViewer").classList.remove("show"); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") $("#cellViewer").classList.remove("show"); });
+
+/* ?tab= で直接タブを開く */
+(function(){
+  const q=new URLSearchParams(location.search);
+  const tabKey=(q.get("tab")||"assessment").toLowerCase();
+  const map={assessment:"t1",diagnosis:"t2",record:"t3",careplan:"t4"};
+  switchTab(map[tabKey]||"t1");
+})();
 </script>
 </body>
 </html>
