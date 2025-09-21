@@ -15,20 +15,26 @@ h1{font-size:48px;margin:6px 0 14px}
 .small{color:#6b5a64;font-size:14px}
 .btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
 .btn:hover{filter:brightness(.98)}
+.btn2{background:#fff;border:2px dashed var(--line);border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer}
+.btn2:hover{background:#fffafd}
 .row{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}
 .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;margin-left:8px}
 .badge.ok{background:#e6f6ec;color:#1b7a3f}
 .badge.ng{background:#ffe2e6;color:#8f1d28}
 pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:220px;overflow:auto}
 .center{display:flex;gap:12px;align-items:center}
+details>summary{cursor:pointer;padding:6px 0;font-weight:700}
+.code{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,Monaco,monospace;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>いつもお疲れさまです</h1>
-    <p class="lead">ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。<br>
-    記録・画像は端末内で完結します。外には出しません。安心してお使いください。</p>
+    <p class="lead">
+      ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。<br>
+      記録・画像は端末内で完結します。外には出しません。安心してお使いください。
+    </p>
 
     <div class="center">
       <button id="btnStart" class="btn">▶ はじめる</button>
@@ -36,18 +42,23 @@ pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:1
     </div>
 
     <div class="row small">
-      <div id="hint">起動リンクを開きました。反応が無ければ下の「初回セットアップ」を一度だけ実施してください。</div>
+      <div id="hint">［はじめる］を押すと接続確認して、起動済みなら自動で開きます。</div>
     </div>
 
     <div class="row">
-      <details>
-        <summary class="small">初回セットアップ（配布側が1回だけ）</summary>
-        <ol class="small">
-          <li>このフォルダごと配布端末へ配置（zipでもOK）。</li>
-          <li><code>deploy.ps1</code> をダブルクリック（ユーザ権限でOK）。</li>
-          <li>以後はログイン時に自動でサーバが起動します。看護師はこのページから「はじめる」を押すだけ。</li>
-        </ol>
-        <p class="small">※ 自動起動済みであれば 127.0.0.1 と通信して自動遷移します。</p>
+      <details open>
+        <summary>初回セットアップ（配布側が1回だけ・<span class="small">権限不要</span>）</summary>
+        <div class="small" style="display:grid;gap:10px;margin-top:8px">
+          <div>
+            ① 下のボタンを押して <code>deploy.ps1</code> をダウンロード
+            <div><a id="btnDL" class="btn2">▼ セットアップをダウンロード（deploy.ps1）</a></div>
+          </div>
+          <div>② ダウンロードした <strong>deploy.ps1</strong> を右クリック → <strong>［実行］</strong>
+            <div class="small">※ “Windows により保護されました” と出たら「詳細情報」→「実行」</div>
+          </div>
+          <div>③ 10秒ほど待ってから、もう一度このページで［はじめる］を押すだけ</div>
+          <div>（以後はログイン時に自動起動。看護師さんは URL を開いて［はじめる］だけでOKです）</div>
+        </div>
       </details>
     </div>
 
@@ -61,40 +72,45 @@ pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:1
 <script>
 const LOG = document.getElementById('log');
 const STAT = document.getElementById('stat');
-const HINT = document.getElementById('hint');
-
 function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
-async function checkOnce(){
+function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
+
+// deploy.ps1 リンク自動生成
+(function(){
   try{
-    const r = await fetch('http://127.0.0.1:8787/ai/health', {cache:'no-store',mode:'no-cors'});
-    // mode:no-cors だとステータス取れないので到達＝OK扱い
-    STAT.textContent = '接続OK'; STAT.className='badge ok';
-    return true;
-  }catch(e){
-    STAT.textContent = '接続NG'; STAT.className='badge ng';
-    return false;
-  }
+    const host = location.hostname;
+    const path = location.pathname.split('/');
+    const user = host.replace('.github.io','');
+    const repo = (path[1]||'').trim() || '';
+    const raw = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
+    const a = document.getElementById('btnDL');
+    a.href = raw; a.download = 'deploy.ps1';
+  }catch(e){}
+})();
+
+// 接続確認
+async function ping(){
+  try{
+    await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
+    setOK(true); return true;
+  }catch(e){ setOK(false); return false; }
 }
-async function tryOpenUI(){
-  const ok = await checkOnce();
-  if(ok){
-    log('OK: ローカルに到達。UIへ移動します。');
+
+// はじめる押下
+async function startFlow(){
+  log('接続確認中…');
+  if(await ping()){
+    log('OK: 応答あり → 開きます。');
     location.href = 'http://127.0.0.1:8787/';
   }else{
-    log('NG: ローカル未起動。起動を待機します…');
-    // 10秒間、1秒ごとに再チェック
-    for(let i=0;i<10;i++){
-      await new Promise(r=>setTimeout(r,1000));
-      if(await checkOnce()){ location.href='http://127.0.0.1:8787/'; return; }
-    }
-    log('NG: まだ起動していません。配布側の初回セットアップをご確認ください。');
+    log('NG: 起動していません。初回セットアップを確認してください。');
   }
 }
 
-document.getElementById('btnStart').addEventListener('click', tryOpenUI);
+document.getElementById('btnStart').addEventListener('click', startFlow);
 
-// ページを開いたら自動で軽くチェック
-tryOpenUI();
+// ページ表示時に軽くチェック
+(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,500)); }})();
 </script>
 </body>
 </html>
