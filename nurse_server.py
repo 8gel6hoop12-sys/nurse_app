@@ -3,7 +3,7 @@
 nurse_server.py — ローカルWebサーバ（UI/API一体）
 起動:  python nurse_server.py --port 8787
 """
-import os, json, threading, subprocess, signal, argparse, re
+import os, json, threading, subprocess, signal, argparse, re, datetime
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
@@ -101,6 +101,32 @@ def _extract_json_block(s: str):
     try: return json.loads(m.group(0))
     except Exception: return None
 
+def _ollama_post(payload: dict, timeout=25):
+    import json as _json, urllib.request
+    host  = os.environ.get("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
+    req = urllib.request.Request(f"{host}/api/generate",
+                                 data=_json.dumps(payload).encode("utf-8"),
+                                 headers={"Content-Type":"application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return _json.loads(r.read().decode("utf-8","ignore"))
+
+def _ai_greet() -> str:
+    """看護師さんをねぎらう短い文（『AI』という語は使わない）"""
+    try:
+        model = os.environ.get("AI_MODEL","qwen2.5:7b-instruct")
+        prompt = (
+            "病棟スタッフへ一言ふわっと声をかけるつもりで、"
+            "看護師さんをねぎらい、落ち着いて始められる短い日本語メッセージを1つ。"
+            "60〜120文字。改行なし。絵文字なし。「AI」という語は使わない。"
+            "端末内で記録が完結し安心である旨をやわらかく含める。"
+        )
+        js = _ollama_post({"model": model, "prompt": prompt, "stream": False})
+        text = (js.get("response") or "").strip()
+        text = re.sub(r"\s+", " ", text).strip(' "\'')
+        return text[:180] if text else ""
+    except Exception:
+        return ""
+
 def _ai_map_so(text: str):
     """Ollama に投げて S/O の各項目に割り振る。失敗しても空で返す。"""
     try:
@@ -131,9 +157,16 @@ O側: name, T, HR, RR, SpO2, SBP, DBP, NRS, awareness, resp, circ, excrete, lab,
         return {"S":{}, "O":{}}
 
 class Handler(BaseHTTPRequestHandler):
+    # CORS（GitHub Pages → 127.0.0.1:8787 を許可）
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _send_json(self, obj, code=200):
         buf = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
+        self._cors()
         self.send_header("Content-Type","application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(buf)))
         self.end_headers()
@@ -141,10 +174,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send_bytes(self, data: bytes, ctype="application/octet-stream"):
         self.send_response(200)
+        self._cors()
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.end_headers()
 
     def do_GET(self):
         p = urlparse(self.path).path
@@ -152,6 +191,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_bytes(Path("nurse_ui.html").read_bytes(), "text/html; charset=utf-8")
         if p == "/ai/health":
             return self._send_json({"ok": True, "message": "alive"})
+        if p == "/ai/greet":
+            msg = _ai_greet() or "いつもありがとうございます。記録はこの端末の中で完結します。安心して始めてください。"
+            return self._send_json({"ok": True, "message": msg})
         if p == "/nanda.xlsx":
             if not Path(NANDA_XLSX).exists():
                 return self._send_json({"ok":False,"error":"nanda_db.xlsx not found"},404)
@@ -176,6 +218,25 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(ln).decode("utf-8") if ln>0 else ""
         try: js = json.loads(body) if body else {}
         except Exception: js = {}
+
+        # ---- 追加: ログイン（PIN照合・ログのみ） ----
+        if p == "/auth/login":
+            staff = (js.get("staff") or "").strip()
+            pin   = (js.get("pin") or "").strip()
+            required = os.environ.get("LOGIN_PIN","").strip()
+            ok = True if required=="" else (pin == required)
+            # 監査ログ（端末内）
+            try:
+                rec = {
+                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
+                    "staff": staff, "ok": ok
+                }
+                with open("login_log.jsonl","a",encoding="utf-8") as f:
+                    f.write(json.dumps(rec, ensure_ascii=False)+"\n")
+            except Exception:
+                pass
+            return self._send_json({"ok": ok, "message": "authorized" if ok else "invalid pin"})
+        # --------------------------------------------
 
         if p.startswith("/save/"):
             ok, msg = _save_text(p.split("/")[-1], js.get("text",""))

@@ -7,7 +7,7 @@
 <style>
 :root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--accent2:#f7cfe3;--text:#2e2a2f}
 *{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
 .wrap{max-width:1100px;margin:28px auto;padding:20px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 20px}
 h1{font-size:48px;margin:6px 0 14px}
@@ -25,13 +25,25 @@ pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:1
 .center{display:flex;gap:12px;align-items:center}
 details>summary{cursor:pointer;padding:6px 0;font-weight:700}
 .code{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,Monaco,monospace;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+
+/* Login Modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal.show{display:flex}
+.box{background:#fff;border:1px solid var(--line);border-radius:14px;max-width:520px;width:96vw;padding:18px}
+.box h2{margin:0 0 10px}
+.box label{display:block;font-size:14px;margin:10px 0 6px}
+.box input{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:16px}
+.box .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.box .cancel{background:#fff;border:1px dashed var(--line);color:#333}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
     <h1>いつもお疲れさまです</h1>
-    <p class="lead">
+
+    <!-- ねぎらい文（サーバが起動していればAI生成で上書き） -->
+    <p id="lead" class="lead">
       ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。<br>
       記録・画像は端末内で完結します。外には出しません。安心してお使いください。
     </p>
@@ -42,11 +54,11 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
     </div>
 
     <div class="row small">
-      <div id="hint">［はじめる］を押すと接続確認して、起動済みなら自動で開きます。</div>
+      <div id="hint">［はじめる］を押すと接続確認 → ログイン → 起動します。</div>
     </div>
 
     <div class="row">
-      <details open>
+      <details>
         <summary>初回セットアップ（配布側が1回だけ・<span class="small">権限不要</span>）</summary>
         <div class="small" style="display:grid;gap:10px;margin-top:8px">
           <div>
@@ -56,8 +68,7 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
           <div>② ダウンロードした <strong>deploy.ps1</strong> を右クリック → <strong>［実行］</strong>
             <div class="small">※ “Windows により保護されました” と出たら「詳細情報」→「実行」</div>
           </div>
-          <div>③ 10秒ほど待ってから、もう一度このページで［はじめる］を押すだけ</div>
-          <div>（以後はログイン時に自動起動。看護師さんは URL を開いて［はじめる］だけでOKです）</div>
+          <div>③ 10秒ほど待ってから、このページで［はじめる］を押すだけ</div>
         </div>
       </details>
     </div>
@@ -69,26 +80,57 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
   </div>
 </div>
 
+<!-- Login Modal -->
+<div id="loginModal" class="modal" aria-hidden="true">
+  <div class="box" role="dialog" aria-modal="true">
+    <h2>ログイン</h2>
+    <p class="small">氏名は記録の起点メモに残ります。PIN は配布側が設定している場合のみ必要です。</p>
+    <label>氏名（任意）</label>
+    <input id="staffName" placeholder="例）山田 花子">
+    <label>PIN（必要な場合）</label>
+    <input id="staffPin" placeholder="4桁など" inputmode="numeric">
+    <div class="actions">
+      <button id="loginCancel" class="btn cancel">キャンセル</button>
+      <button id="loginOk" class="btn">ログインして開始</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const LOG = document.getElementById('log');
+const LOG  = document.getElementById('log');
 const STAT = document.getElementById('stat');
-function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
+const LEAD = document.getElementById('lead');
+const M   = document.getElementById('loginModal');
+const staffName = document.getElementById('staffName');
+const staffPin  = document.getElementById('staffPin');
+
+function log(s){ LOG.textContent += s + "\\n"; LOG.scrollTop = LOG.scrollHeight; }
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
-// deploy.ps1 リンク自動生成
+// deploy.ps1 リンク（GitHub Pages 用）
 (function(){
   try{
     const host = location.hostname;
     const path = location.pathname.split('/');
     const user = host.replace('.github.io','');
     const repo = (path[1]||'').trim() || '';
-    const raw = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
+    const raw  = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
     const a = document.getElementById('btnDL');
     a.href = raw; a.download = 'deploy.ps1';
   }catch(e){}
 })();
 
-// 接続確認
+// ねぎらいメッセージ（サーバ起動していればAIで置き換え）
+(async ()=>{
+  try{
+    const r = await fetch('http://127.0.0.1:8787/ai/greet', {cache:'no-store'});
+    if(r.ok){
+      const js = await r.json();
+      if(js && js.ok && js.message){ LEAD.textContent = js.message; }
+    }
+  }catch(e){}
+})();
+
 async function ping(){
   try{
     await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
@@ -96,21 +138,49 @@ async function ping(){
   }catch(e){ setOK(false); return false; }
 }
 
-// はじめる押下
-async function startFlow(){
+// 開始フロー：押したら接続チェック→ログインモーダル→PIN照合→OKなら起動
+document.getElementById('btnStart').addEventListener('click', async ()=>{
   log('接続確認中…');
   if(await ping()){
-    log('OK: 応答あり → 開きます。');
-    location.href = 'http://127.0.0.1:8787/';
+    log('接続OK: ログイン画面を開きます。');
+    M.classList.add('show');
+    staffName.value = localStorage.getItem('staffName') || '';
+    staffPin.value  = '';
   }else{
-    log('NG: 起動していません。初回セットアップを確認してください。');
+    log('接続NG: 初回セットアップ（deploy.ps1）を実行してください。');
   }
-}
+});
 
-document.getElementById('btnStart').addEventListener('click', startFlow);
+document.getElementById('loginCancel').addEventListener('click', ()=>{
+  M.classList.remove('show');
+});
 
-// ページ表示時に軽くチェック
-(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,500)); }})();
+document.getElementById('loginOk').addEventListener('click', async ()=>{
+  const name = staffName.value.trim();
+  const pin  = staffPin.value.trim();
+  try{
+    const r = await fetch('http://127.0.0.1:8787/auth/login', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({staff: name, pin})
+    });
+    const js = await r.json();
+    if(js && js.ok){
+      localStorage.setItem('staffName', name);
+      log('ログインOK: 起動します。');
+      location.href = 'http://127.0.0.1:8787/';
+    }else{
+      log('ログインNG: PINが違う可能性があります。');
+      alert('ログインに失敗しました。PINをご確認ください。');
+    }
+  }catch(e){
+    log('ログイン要求に失敗しました。');
+    alert('ログイン要求に失敗しました。サーバの状態をご確認ください。');
+  }
+});
+
+// 表示直後に軽く接続チェック
+(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); }})();
 </script>
 </body>
 </html>
