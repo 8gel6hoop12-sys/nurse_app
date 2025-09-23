@@ -3,10 +3,10 @@
 nurse_server.py — ローカルWebサーバ（UI/API一体）
 起動:  python nurse_server.py --port 8787
 """
-import os, json, threading, subprocess, signal, argparse, re, datetime
+import os, json, threading, subprocess, signal, argparse, re
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # 実行ディレクトリ固定
 APP_DIR = Path(__file__).resolve().parent
@@ -19,7 +19,7 @@ os.environ["OLLAMA_HOST"]    = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:1
 os.environ["AI_LOG_DISABLE"] = "1"
 os.environ.pop("OPENAI_API_KEY", None)
 
-# 主要ファイル
+# 主要ファイル（共通名・個人保存時は uid を付ける）
 ASSESS_RESULT_TXT = "assessment_result.txt"
 ASSESS_FINAL_TXT  = "assessment_final.txt"
 DIAG_RESULT_TXT   = "diagnosis_result.txt"
@@ -33,6 +33,29 @@ NANDA_XLSX        = "nanda_db.xlsx"
 
 TASKS = { "assessment": {}, "diagnosis": {}, "record": {}, "careplan": {} }
 LOCK = threading.Lock()
+
+def _with_uid(base: str, uid: str) -> str:
+    """個人用ファイル名にすげ替え（xxx_final.txt → xxx_final_<uid>.txt）"""
+    if not uid:
+        return base
+    p = Path(base)
+    return f"{p.stem}_{uid}{p.suffix}"
+
+def _get_uid_from_headers(handler) -> str:
+    """?uid= / Header / Cookie の順で取得。無ければ空文字"""
+    try:
+        url = urlparse(handler.path)
+        qs = parse_qs(url.query)
+        uid = (qs.get('uid') or [''])[0]
+        if not uid:
+            uid = handler.headers.get('X-User','')
+        if not uid:
+            ck = handler.headers.get('Cookie','')
+            m = re.search(r'nurse_uid=([A-Za-z0-9._\-]{8,})', ck or '')
+            uid = m.group(1) if m else ''
+        return uid
+    except Exception:
+        return ''
 
 def _spawn(name, cmd, stdin_text=None, env_overrides=None):
     with LOCK:
@@ -78,54 +101,11 @@ def _cancel(name):
             except Exception: pass
         TASKS.setdefault(name,{}).update({"running":False,"done":False,"rc":None})
 
-def _save_text(kind: str, text: str):
-    mapping = {
-        "assessment": (ASSESS_FINAL_TXT, ASSESS_RESULT_TXT),
-        "diagnosis":  (DIAG_FINAL_TXT,   DIAG_RESULT_TXT),
-        "record":     (RECORD_FINAL_TXT, RECORD_RESULT_TXT),
-        "careplan":   (PLAN_FINAL_TXT,   PLAN_RESULT_TXT),
-    }
-    pair = mapping.get(kind)
-    if not pair: return False, "unsupported kind"
-    fn_final, fn_result = pair
-    try:
-        Path(fn_final).write_text(text or "", encoding="utf-8", errors="ignore")
-        Path(fn_result).write_text(text or "", encoding="utf-8", errors="ignore")
-        return True, "ok"
-    except Exception as e:
-        return False, str(e)
-
 def _extract_json_block(s: str):
     m = re.search(r"\{.*\}", s, re.S)
     if not m: return None
     try: return json.loads(m.group(0))
     except Exception: return None
-
-def _ollama_post(payload: dict, timeout=25):
-    import json as _json, urllib.request
-    host  = os.environ.get("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
-    req = urllib.request.Request(f"{host}/api/generate",
-                                 data=_json.dumps(payload).encode("utf-8"),
-                                 headers={"Content-Type":"application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return _json.loads(r.read().decode("utf-8","ignore"))
-
-def _ai_greet() -> str:
-    """看護師さんをねぎらう短い文（『AI』という語は使わない）"""
-    try:
-        model = os.environ.get("AI_MODEL","qwen2.5:7b-instruct")
-        prompt = (
-            "病棟スタッフへ一言ふわっと声をかけるつもりで、"
-            "看護師さんをねぎらい、落ち着いて始められる短い日本語メッセージを1つ。"
-            "60〜120文字。改行なし。絵文字なし。「AI」という語は使わない。"
-            "端末内で記録が完結し安心である旨をやわらかく含める。"
-        )
-        js = _ollama_post({"model": model, "prompt": prompt, "stream": False})
-        text = (js.get("response") or "").strip()
-        text = re.sub(r"\s+", " ", text).strip(' "\'')
-        return text[:180] if text else ""
-    except Exception:
-        return ""
 
 def _ai_map_so(text: str):
     """Ollama に投げて S/O の各項目に割り振る。失敗しても空で返す。"""
@@ -157,33 +137,24 @@ O側: name, T, HR, RR, SpO2, SBP, DBP, NRS, awareness, resp, circ, excrete, lab,
         return {"S":{}, "O":{}}
 
 class Handler(BaseHTTPRequestHandler):
-    # CORS（GitHub Pages → 127.0.0.1:8787 を許可）
-    def _cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-
-    def _send_json(self, obj, code=200):
+    def _send_json(self, obj, code=200, set_uid=None):
         buf = json.dumps(obj, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
-        self._cors()
         self.send_header("Content-Type","application/json; charset=utf-8")
+        if set_uid:
+            self.send_header("Set-Cookie", f"nurse_uid={set_uid}; Path=/; SameSite=Lax")
         self.send_header("Content-Length", str(len(buf)))
         self.end_headers()
         self.wfile.write(buf)
 
-    def _send_bytes(self, data: bytes, ctype="application/octet-stream"):
+    def _send_bytes(self, data: bytes, ctype="application/octet-stream", set_uid=None):
         self.send_response(200)
-        self._cors()
         self.send_header("Content-Type", ctype)
+        if set_uid:
+            self.send_header("Set-Cookie", f"nurse_uid={set_uid}; Path=/; SameSite=Lax")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self._cors()
-        self.end_headers()
 
     def do_GET(self):
         p = urlparse(self.path).path
@@ -192,24 +163,47 @@ class Handler(BaseHTTPRequestHandler):
         if p == "/ai/health":
             return self._send_json({"ok": True, "message": "alive"})
         if p == "/ai/greet":
-            msg = _ai_greet() or "いつもありがとうございます。記録はこの端末の中で完結します。安心して始めてください。"
+            # 優しい挨拶（Ollamaがあれば即興、無ければ固定）
+            msg = "朝も夜も、みんなのために尽くしてくださって本当にありがとうございます。入力や確認はここで静かに終えられます。無理なく、ひとつずついきましょう。"
+            try:
+                import json as _json, urllib.request
+                host  = os.environ.get("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
+                model = os.environ.get("AI_MODEL","qwen2.5:7b-instruct")
+                prompt = "看護職の方へ、労いと感謝を一言二言で。やさしく、落ち着く日本語で。敬語で。"
+                payload = _json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+                req = urllib.request.Request(f"{host}/api/generate", data=payload, headers={"Content-Type":"application/json"})
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    js = _json.loads(r.read().decode("utf-8", errors="ignore"))
+                resp = (js.get("response") or "").strip()
+                if resp: msg = resp
+            except Exception:
+                pass
             return self._send_json({"ok": True, "message": msg})
+
         if p == "/nanda.xlsx":
             if not Path(NANDA_XLSX).exists():
                 return self._send_json({"ok":False,"error":"nanda_db.xlsx not found"},404)
             return self._send_bytes(Path(NANDA_XLSX).read_bytes(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
         if p.startswith("/files/"):
-            fn = p.replace("/files/","",1)
-            q = Path(fn)
-            if not q.exists(): return self._send_json({"ok":False,"error":"not found"},404)
+            url = urlparse(self.path)
+            fn  = p.replace("/files/","",1)
+            uid = _get_uid_from_headers(self)
+            cand1 = Path(_with_uid(fn, uid))
+            cand2 = Path(fn)
+            q = cand1 if cand1.exists() else cand2
+            if not q.exists():
+                return self._send_json({"ok":False,"error":"not found"},404)
             ctype = "text/plain; charset=utf-8"
-            if fn.endswith(".json"): ctype="application/json; charset=utf-8"
-            return self._send_bytes(q.read_bytes(), ctype)
+            if str(q).endswith(".json"): ctype="application/json; charset=utf-8"
+            return self._send_bytes(q.read_bytes(), ctype=ctype, set_uid=uid)
+
         if p.startswith("/status/"):
             key = p.split("/")[-1]
             st = TASKS.get(key, {"running": False, "done": False})
             return self._send_json(st)
+
         return self._send_json({"ok":False,"error":"not found"},404)
 
     def do_POST(self):
@@ -219,28 +213,27 @@ class Handler(BaseHTTPRequestHandler):
         try: js = json.loads(body) if body else {}
         except Exception: js = {}
 
-        # ---- 追加: ログイン（PIN照合・ログのみ） ----
-        if p == "/auth/login":
-            staff = (js.get("staff") or "").strip()
-            pin   = (js.get("pin") or "").strip()
-            required = os.environ.get("LOGIN_PIN","").strip()
-            ok = True if required=="" else (pin == required)
-            # 監査ログ（端末内）
-            try:
-                rec = {
-                    "ts": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "staff": staff, "ok": ok
-                }
-                with open("login_log.jsonl","a",encoding="utf-8") as f:
-                    f.write(json.dumps(rec, ensure_ascii=False)+"\n")
-            except Exception:
-                pass
-            return self._send_json({"ok": ok, "message": "authorized" if ok else "invalid pin"})
-        # --------------------------------------------
-
         if p.startswith("/save/"):
-            ok, msg = _save_text(p.split("/")[-1], js.get("text",""))
-            return self._send_json({"ok":ok,"message":msg}, 200 if ok else 500)
+            uid = _get_uid_from_headers(self)
+            kind = p.split("/")[-1]
+            mapping = {
+                "assessment": (ASSESS_FINAL_TXT, ASSESS_RESULT_TXT),
+                "diagnosis":  (DIAG_FINAL_TXT,   DIAG_RESULT_TXT),
+                "record":     (RECORD_FINAL_TXT, RECORD_RESULT_TXT),
+                "careplan":   (PLAN_FINAL_TXT,   PLAN_RESULT_TXT),
+            }
+            pair = mapping.get(kind)
+            if not pair:
+                return self._send_json({"ok":False,"error":"unsupported kind"},400)
+            fn_final = _with_uid(pair[0], uid)
+            fn_result= _with_uid(pair[1], uid)
+            try:
+                text = (js.get("text") or "")
+                Path(fn_final).write_text(text, encoding="utf-8", errors="ignore")
+                Path(fn_result).write_text(text, encoding="utf-8", errors="ignore")
+                return self._send_json({"ok":True,"message":"ok"}, set_uid=uid)
+            except Exception as e:
+                return self._send_json({"ok":False,"error":str(e)},500)
 
         if p == "/run/assessment":
             S = js.get("S",""); O = js.get("O","")
@@ -264,7 +257,7 @@ class Handler(BaseHTTPRequestHandler):
             _cancel(p.split("/")[-1]); return self._send_json({"ok": True})
 
         if p == "/review/assessment" or p == "/review/record" or p == "/review/careplan":
-            text = (js.get("text") or "").strip()
+            text = (js.get("text") or "").trim() if hasattr(str,"trim") else (js.get("text") or "").strip()
             return self._send_json({"ok": True, "review": text})
 
         if p == "/ai/map_so":

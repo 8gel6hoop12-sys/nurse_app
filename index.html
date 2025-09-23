@@ -15,27 +15,13 @@ h1{font-size:48px;margin:6px 0 14px}
 .small{color:#6b5a64;font-size:14px}
 .btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
 .btn:hover{filter:brightness(.98)}
-.row{margin-top:18px}
+.row{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}
 .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;margin-left:8px}
 .badge.ok{background:#e6f6ec;color:#1b7a3f}
 .badge.ng{background:#ffe2e6;color:#8f1d28}
-pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:180px;overflow:auto}
-.center{display:flex;gap:12px;align-items:center}
-
-/* modal（ログイン/セットアップ共通） */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
-.modal.show{display:flex}
-.box{background:#fff;border:1px solid var(--line);border-radius:14px;max-width:520px;width:96vw;padding:18px}
-.box h2{margin:0 0 10px}
-.box label{display:block;font-size:14px;margin:10px 0 6px}
-.box input{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:16px}
-.box .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.box .ghost{background:#fff;border:1px dashed var(--line);color:#333}
-.hidden{display:none}
-
-/* トースト */
-.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2b2a30;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s}
-.toast.show{opacity:1}
+pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:220px;overflow:auto}
+.center{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.code{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,Monaco,monospace;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -43,11 +29,12 @@ pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:1
   <div class="card">
     <h1>いつもお疲れさまです</h1>
 
-    <!-- ねぎらい文：起動中ならサーバ生成を使用／未起動でも丁寧な固定文をランダム表示 -->
+    <!-- ねぎらい：最初はローカル候補、サーバ起動時に即興メッセージで上書き -->
     <p id="lead" class="lead"></p>
 
     <div class="center">
       <button id="btnStart" class="btn">▶ はじめる</button>
+      <button id="btnShow" class="btn" style="background:#fff;color:#2e2a2f;border:2px dashed var(--line)">最新結果を見る</button>
       <span id="stat" class="badge ng">接続NG</span>
     </div>
 
@@ -57,77 +44,31 @@ pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:1
   </div>
 </div>
 
-<!-- ログイン -->
-<div id="loginModal" class="modal" aria-hidden="true">
-  <div class="box" role="dialog" aria-modal="true">
-    <h2>ログイン</h2>
-    <p class="small">氏名は記録の起点メモに残ります。PIN は配布側が設定している場合のみ必要です。</p>
-    <label>氏名（任意）</label>
-    <input id="staffName" placeholder="例）山田 花子">
-    <label>PIN（必要な場合）</label>
-    <input id="staffPin" placeholder="4桁など" inputmode="numeric">
-    <div class="actions">
-      <button id="loginCancel" class="btn ghost">キャンセル</button>
-      <button id="loginOk" class="btn">ログインして開始</button>
-    </div>
-  </div>
-</div>
-
-<!-- ワンクリック・セットアップ（最小案内） -->
-<div id="setupModal" class="modal" aria-hidden="true">
-  <div class="box" role="dialog" aria-modal="true">
-    <h2>準備をはじめます</h2>
-    <p class="small" id="setupMsg">セットアップ用のファイルをダウンロードしました。開いて実行すると準備が完了します。</p>
-    <div class="actions">
-      <a id="setupDL" class="btn ghost">もう一度ダウンロード</a>
-      <button id="setupClose" class="btn">OK</button>
-    </div>
-  </div>
-</div>
-
-<div id="toast" class="toast"></div>
-
 <script>
 const LOG  = document.getElementById('log');
 const STAT = document.getElementById('stat');
 const LEAD = document.getElementById('lead');
-const T    = document.getElementById('toast');
-const loginM = document.getElementById('loginModal');
-const staffName = document.getElementById('staffName');
-const staffPin  = document.getElementById('staffPin');
-const setupM = document.getElementById('setupModal');
-const setupDL = document.getElementById('setupDL');
 
-function toast(s){ T.textContent=s; T.classList.add('show'); setTimeout(()=>T.classList.remove('show'),2000); }
 function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
-// ねぎらい（ローカル固定候補）→ サーバ起動時は差し替え
+// 匿名UID：初回生成→localStorage保持（個人別保存/閲覧に利用）
+function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)}) }
+const NURSE_UID = (()=>{ let u = localStorage.getItem('nurse_uid'); if(!u){ u=uuid(); localStorage.setItem('nurse_uid',u); } return u; })();
+
+// ねぎらい（ローカル候補）
 const LOCAL_GREETINGS = [
-  "今日も現場を支えてくださってありがとうございます。ここでの記録はすべて端末内で完結します。どうぞ安心して始めてください。",
-  "忙しい中、いつも丁寧なケアを本当にお疲れさまです。記録は端末の中だけで扱います。落ち着いて進められるよう支えますね。",
-  "連日の対応に心から感謝しています。ここでの入力は外に出ません。負担を少しでも軽くできるよう整えておきました。"
+  "朝も夜も、みんなのために力を尽くしてくださってありがとうございます。ここでの記録は端末内で完結します。少しでも負担が軽くなるよう、そっと支えます。",
+  "連日のケア、本当にお疲れさまです。入力や確認がすっと終わるように整えました。深呼吸して、ゆっくり進めてくださいね。",
+  "忙しい現場を支えてくれてありがとう。ここではデータは外に出ません。安心して、今必要なことだけに集中してください。"
 ];
 LEAD.textContent = LOCAL_GREETINGS[Math.floor(Math.random()*LOCAL_GREETINGS.length)];
 
-// サーバからのねぎらい（起動していれば置き換え）
+// サーバ起動時は優しい一言を取得して上書き
 (async ()=>{ try{
-  const r = await fetch('http://127.0.0.1:8787/ai/greet', {cache:'no-store'});
+  const r = await fetch('http://127.0.0.1:8787/ai/greet',{cache:'no-store'});
   if(r.ok){ const js = await r.json(); if(js?.ok && js.message){ LEAD.textContent = js.message; } }
 }catch(e){} })();
-
-// deploy.ps1 のURL（GitHub Pages 上のこのrepoから直リンク）
-let DEPLOY_URL = "#";
-(function(){
-  try{
-    const host = location.hostname;
-    const path = location.pathname.split('/');
-    const user = host.replace('.github.io','');
-    const repo = (path[1]||'').trim() || '';
-    DEPLOY_URL = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
-    setupDL.href = DEPLOY_URL; setupDL.download = 'deploy.ps1';
-  }catch(e){}
-})();
 
 async function ping(){
   try{
@@ -136,46 +77,40 @@ async function ping(){
   }catch(e){ setOK(false); return false; }
 }
 
-// はじめる
+// はじめる：接続OK→UIへ、NG→deploy.ps1を自動DL
 document.getElementById('btnStart').addEventListener('click', async ()=>{
   log('接続確認中…');
   if(await ping()){
-    log('接続OK: ログインを表示します。');
-    loginM.classList.add('show');
-    staffName.value = localStorage.getItem('staffName') || '';
-    staffPin.value  = '';
+    log('接続OK: 開きます。');
+    location.href = `http://127.0.0.1:8787/?uid=${encodeURIComponent(NURSE_UID)}`;
   }else{
-    log('接続NG: 初回準備を開始します（ファイルを保存します）');
-    // 1クリック：自動でダウンロードを開始
-    const a=document.createElement('a'); a.href=DEPLOY_URL; a.download='deploy.ps1'; document.body.appendChild(a); a.click(); a.remove();
-    setupM.classList.add('show');
-    toast('deploy.ps1 をダウンロードしました。開いて実行してください。');
+    log('接続NG: 初回準備を開始（セットアップを保存）');
+    try{
+      const host = location.hostname;
+      const repo = (location.pathname.split('/')[1]||'').trim();
+      const user = host.replace('.github.io','');
+      const url  = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
+      const a=document.createElement('a'); a.href=url; a.download='deploy.ps1'; document.body.appendChild(a); a.click(); a.remove();
+      alert('deploy.ps1 をダウンロードしました。開いて「実行」してください。実行後にもう一度［はじめる］を押せば開きます。');
+    }catch(e){ alert('ダウンロードに失敗しました。配布者へご連絡ください。'); }
   }
 });
 
-// ログイン
-document.getElementById('loginCancel').addEventListener('click', ()=> loginM.classList.remove('show'));
-document.getElementById('loginOk').addEventListener('click', async ()=>{
-  const name = staffName.value.trim();
-  const pin  = staffPin.value.trim();
+// 最新結果を見る（個人UIDの最終ファイルをまとめて取得）
+document.getElementById('btnShow').addEventListener('click', async ()=>{
+  if(!await ping()){ alert('まだ準備ができていません。まず［はじめる］から準備してください。'); return; }
   try{
-    const r = await fetch('http://127.0.0.1:8787/auth/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({staff: name, pin})
-    });
-    const js = await r.json();
-    if(js?.ok){
-      localStorage.setItem('staffName', name);
-      log('ログインOK: 起動します。');
-      location.href = 'http://127.0.0.1:8787/';
-    }else{
-      log('ログインNG: PINをご確認ください。'); alert('ログインに失敗しました。PINをご確認ください。');
+    const kinds = ['assessment','diagnosis','record','careplan'];
+    const names = {assessment:'アセスメント',diagnosis:'診断',record:'記録',careplan:'計画'};
+    let out = '';
+    for(const k of kinds){
+      const r = await fetch(`http://127.0.0.1:8787/files/${k}_final.txt?uid=${encodeURIComponent(NURSE_UID)}`);
+      const t = r.ok ? await r.text() : '（まだ保存がありません）';
+      out += `【${names[k]}】\n${t.trim()||'（空です）'}\n\n`;
     }
-  }catch(e){ log('ログイン要求に失敗しました。'); alert('サーバの状態をご確認ください。'); }
+    LOG.textContent = out;
+  }catch(e){ alert('取得に失敗しました。'); }
 });
-
-// セットアップモーダル
-document.getElementById('setupClose').addEventListener('click', ()=> setupM.classList.remove('show'));
 
 // ちらっと接続確認
 (async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); }})();
