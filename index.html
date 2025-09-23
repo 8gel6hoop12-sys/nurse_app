@@ -7,7 +7,7 @@
 <style>
 :root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--accent2:#f7cfe3;--text:#2e2a2f}
 *{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
 .wrap{max-width:1100px;margin:28px auto;padding:20px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 20px}
 h1{font-size:48px;margin:6px 0 14px}
@@ -15,18 +15,14 @@ h1{font-size:48px;margin:6px 0 14px}
 .small{color:#6b5a64;font-size:14px}
 .btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
 .btn:hover{filter:brightness(.98)}
-.btn2{background:#fff;border:2px dashed var(--line);border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer}
-.btn2:hover{background:#fffafd}
-.row{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}
+.row{margin-top:18px}
 .badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;margin-left:8px}
 .badge.ok{background:#e6f6ec;color:#1b7a3f}
 .badge.ng{background:#ffe2e6;color:#8f1d28}
-pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:220px;overflow:auto}
+pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:180px;overflow:auto}
 .center{display:flex;gap:12px;align-items:center}
-details>summary{cursor:pointer;padding:6px 0;font-weight:700}
-.code{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,Monaco,monospace;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 
-/* Login Modal */
+/* modal（ログイン/セットアップ共通） */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 .modal.show{display:flex}
 .box{background:#fff;border:1px solid var(--line);border-radius:14px;max-width:520px;width:96vw;padding:18px}
@@ -34,7 +30,12 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
 .box label{display:block;font-size:14px;margin:10px 0 6px}
 .box input{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:16px}
 .box .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-.box .cancel{background:#fff;border:1px dashed var(--line);color:#333}
+.box .ghost{background:#fff;border:1px dashed var(--line);color:#333}
+.hidden{display:none}
+
+/* トースト */
+.toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#2b2a30;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
 </style>
 </head>
 <body>
@@ -42,11 +43,8 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
   <div class="card">
     <h1>いつもお疲れさまです</h1>
 
-    <!-- ねぎらい文（サーバが起動していればAI生成で上書き） -->
-    <p id="lead" class="lead">
-      ふだんの流れはそのままに、入力と確認がすっと終わるよう整えています。<br>
-      記録・画像は端末内で完結します。外には出しません。安心してお使いください。
-    </p>
+    <!-- ねぎらい文：起動中ならサーバ生成を使用／未起動でも丁寧な固定文をランダム表示 -->
+    <p id="lead" class="lead"></p>
 
     <div class="center">
       <button id="btnStart" class="btn">▶ はじめる</button>
@@ -54,33 +52,12 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
     </div>
 
     <div class="row small">
-      <div id="hint">［はじめる］を押すと接続確認 → ログイン → 起動します。</div>
-    </div>
-
-    <div class="row">
-      <details>
-        <summary>初回セットアップ（配布側が1回だけ・<span class="small">権限不要</span>）</summary>
-        <div class="small" style="display:grid;gap:10px;margin-top:8px">
-          <div>
-            ① 下のボタンを押して <code>deploy.ps1</code> をダウンロード
-            <div><a id="btnDL" class="btn2">▼ セットアップをダウンロード（deploy.ps1）</a></div>
-          </div>
-          <div>② ダウンロードした <strong>deploy.ps1</strong> を右クリック → <strong>［実行］</strong>
-            <div class="small">※ “Windows により保護されました” と出たら「詳細情報」→「実行」</div>
-          </div>
-          <div>③ 10秒ほど待ってから、このページで［はじめる］を押すだけ</div>
-        </div>
-      </details>
-    </div>
-
-    <div class="row small">
-      <strong>状況</strong>
       <pre id="log"></pre>
     </div>
   </div>
 </div>
 
-<!-- Login Modal -->
+<!-- ログイン -->
 <div id="loginModal" class="modal" aria-hidden="true">
   <div class="box" role="dialog" aria-modal="true">
     <h2>ログイン</h2>
@@ -90,44 +67,65 @@ details>summary{cursor:pointer;padding:6px 0;font-weight:700}
     <label>PIN（必要な場合）</label>
     <input id="staffPin" placeholder="4桁など" inputmode="numeric">
     <div class="actions">
-      <button id="loginCancel" class="btn cancel">キャンセル</button>
+      <button id="loginCancel" class="btn ghost">キャンセル</button>
       <button id="loginOk" class="btn">ログインして開始</button>
     </div>
   </div>
 </div>
 
+<!-- ワンクリック・セットアップ（最小案内） -->
+<div id="setupModal" class="modal" aria-hidden="true">
+  <div class="box" role="dialog" aria-modal="true">
+    <h2>準備をはじめます</h2>
+    <p class="small" id="setupMsg">セットアップ用のファイルをダウンロードしました。開いて実行すると準備が完了します。</p>
+    <div class="actions">
+      <a id="setupDL" class="btn ghost">もう一度ダウンロード</a>
+      <button id="setupClose" class="btn">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
 <script>
 const LOG  = document.getElementById('log');
 const STAT = document.getElementById('stat');
 const LEAD = document.getElementById('lead');
-const M   = document.getElementById('loginModal');
+const T    = document.getElementById('toast');
+const loginM = document.getElementById('loginModal');
 const staffName = document.getElementById('staffName');
 const staffPin  = document.getElementById('staffPin');
+const setupM = document.getElementById('setupModal');
+const setupDL = document.getElementById('setupDL');
 
-function log(s){ LOG.textContent += s + "\\n"; LOG.scrollTop = LOG.scrollHeight; }
+function toast(s){ T.textContent=s; T.classList.add('show'); setTimeout(()=>T.classList.remove('show'),2000); }
+function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
-// deploy.ps1 リンク（GitHub Pages 用）
+// ねぎらい（ローカル固定候補）→ サーバ起動時は差し替え
+const LOCAL_GREETINGS = [
+  "今日も現場を支えてくださってありがとうございます。ここでの記録はすべて端末内で完結します。どうぞ安心して始めてください。",
+  "忙しい中、いつも丁寧なケアを本当にお疲れさまです。記録は端末の中だけで扱います。落ち着いて進められるよう支えますね。",
+  "連日の対応に心から感謝しています。ここでの入力は外に出ません。負担を少しでも軽くできるよう整えておきました。"
+];
+LEAD.textContent = LOCAL_GREETINGS[Math.floor(Math.random()*LOCAL_GREETINGS.length)];
+
+// サーバからのねぎらい（起動していれば置き換え）
+(async ()=>{ try{
+  const r = await fetch('http://127.0.0.1:8787/ai/greet', {cache:'no-store'});
+  if(r.ok){ const js = await r.json(); if(js?.ok && js.message){ LEAD.textContent = js.message; } }
+}catch(e){} })();
+
+// deploy.ps1 のURL（GitHub Pages 上のこのrepoから直リンク）
+let DEPLOY_URL = "#";
 (function(){
   try{
     const host = location.hostname;
     const path = location.pathname.split('/');
     const user = host.replace('.github.io','');
     const repo = (path[1]||'').trim() || '';
-    const raw  = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
-    const a = document.getElementById('btnDL');
-    a.href = raw; a.download = 'deploy.ps1';
-  }catch(e){}
-})();
-
-// ねぎらいメッセージ（サーバ起動していればAIで置き換え）
-(async ()=>{
-  try{
-    const r = await fetch('http://127.0.0.1:8787/ai/greet', {cache:'no-store'});
-    if(r.ok){
-      const js = await r.json();
-      if(js && js.ok && js.message){ LEAD.textContent = js.message; }
-    }
+    DEPLOY_URL = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
+    setupDL.href = DEPLOY_URL; setupDL.download = 'deploy.ps1';
   }catch(e){}
 })();
 
@@ -138,48 +136,48 @@ async function ping(){
   }catch(e){ setOK(false); return false; }
 }
 
-// 開始フロー：押したら接続チェック→ログインモーダル→PIN照合→OKなら起動
+// はじめる
 document.getElementById('btnStart').addEventListener('click', async ()=>{
   log('接続確認中…');
   if(await ping()){
-    log('接続OK: ログイン画面を開きます。');
-    M.classList.add('show');
+    log('接続OK: ログインを表示します。');
+    loginM.classList.add('show');
     staffName.value = localStorage.getItem('staffName') || '';
     staffPin.value  = '';
   }else{
-    log('接続NG: 初回セットアップ（deploy.ps1）を実行してください。');
+    log('接続NG: 初回準備を開始します（ファイルを保存します）');
+    // 1クリック：自動でダウンロードを開始
+    const a=document.createElement('a'); a.href=DEPLOY_URL; a.download='deploy.ps1'; document.body.appendChild(a); a.click(); a.remove();
+    setupM.classList.add('show');
+    toast('deploy.ps1 をダウンロードしました。開いて実行してください。');
   }
 });
 
-document.getElementById('loginCancel').addEventListener('click', ()=>{
-  M.classList.remove('show');
-});
-
+// ログイン
+document.getElementById('loginCancel').addEventListener('click', ()=> loginM.classList.remove('show'));
 document.getElementById('loginOk').addEventListener('click', async ()=>{
   const name = staffName.value.trim();
   const pin  = staffPin.value.trim();
   try{
     const r = await fetch('http://127.0.0.1:8787/auth/login', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({staff: name, pin})
     });
     const js = await r.json();
-    if(js && js.ok){
+    if(js?.ok){
       localStorage.setItem('staffName', name);
       log('ログインOK: 起動します。');
       location.href = 'http://127.0.0.1:8787/';
     }else{
-      log('ログインNG: PINが違う可能性があります。');
-      alert('ログインに失敗しました。PINをご確認ください。');
+      log('ログインNG: PINをご確認ください。'); alert('ログインに失敗しました。PINをご確認ください。');
     }
-  }catch(e){
-    log('ログイン要求に失敗しました。');
-    alert('ログイン要求に失敗しました。サーバの状態をご確認ください。');
-  }
+  }catch(e){ log('ログイン要求に失敗しました。'); alert('サーバの状態をご確認ください。'); }
 });
 
-// 表示直後に軽く接続チェック
+// セットアップモーダル
+document.getElementById('setupClose').addEventListener('click', ()=> setupM.classList.remove('show'));
+
+// ちらっと接続確認
 (async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); }})();
 </script>
 </body>
