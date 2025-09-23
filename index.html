@@ -5,71 +5,57 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>看護アシスタント | 入口</title>
 <style>
-:root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--accent2:#f7cfe3;--text:#2e2a2f}
+:root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--text:#2e2a2f}
 *{box-sizing:border-box}html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
 .wrap{max-width:1100px;margin:28px auto;padding:20px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px 20px}
-h1{font-size:48px;margin:6px 0 14px}
-.lead{font-size:22px;line-height:1.7;margin:10px 0 24px}
-.small{color:#6b5a64;font-size:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px}
+h1{font-size:46px;margin:6px 0 14px}
+.lead{font-size:20px;line-height:1.9;margin:8px 0 22px}
 .btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
 .btn:hover{filter:brightness(.98)}
-.row{margin-top:18px;border-top:1px dashed var(--line);padding-top:14px}
-.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;margin-left:8px}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;margin-left:8px}
 .badge.ok{background:#e6f6ec;color:#1b7a3f}
 .badge.ng{background:#ffe2e6;color:#8f1d28}
-pre{white-space:pre-wrap;background:#fff;border:1px dashed var(--line);padding:10px;border-radius:12px;height:220px;overflow:auto}
-.center{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.code{font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,Monaco,monospace;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.small{color:#6b5a64;font-size:14px}
+hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="card">
-    <h1>いつもお疲れさまです</h1>
+    <h1 id="title">いつもお疲れさまです</h1>
+    <p id="msg" class="lead">
+      今日も安全と安心のために尽くしてくださって、ありがとうございます。<br>
+      ここでは、ふだんの流れのまま、入力と確認をすっと終わらせるお手伝いをします。<br>
+      記録や画像は端末内だけで完結します。外へは出しません。
+    </p>
 
-    <!-- ねぎらい：最初はローカル候補、サーバ起動時に即興メッセージで上書き -->
-    <p id="lead" class="lead"></p>
+    <button id="btnStart" class="btn">▶ はじめる</button>
+    <span id="stat" class="badge ng">接続NG</span>
 
-    <div class="center">
-      <button id="btnStart" class="btn">▶ はじめる</button>
-      <button id="btnShow" class="btn" style="background:#fff;color:#2e2a2f;border:2px dashed var(--line)">最新結果を見る</button>
-      <span id="stat" class="badge ng">接続NG</span>
-    </div>
-
-    <div class="row small">
-      <pre id="log"></pre>
-    </div>
+    <hr>
+    <div class="small" id="hint">［はじめる］を押すと接続確認 → 問題なければアプリ画面を開きます。</div>
   </div>
 </div>
 
 <script>
-const LOG  = document.getElementById('log');
 const STAT = document.getElementById('stat');
-const LEAD = document.getElementById('lead');
-
-function log(s){ LOG.textContent += s + "\n"; LOG.scrollTop = LOG.scrollHeight; }
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
-// 匿名UID：初回生成→localStorage保持（個人別保存/閲覧に利用）
-function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16)}) }
-const NURSE_UID = (()=>{ let u = localStorage.getItem('nurse_uid'); if(!u){ u=uuid(); localStorage.setItem('nurse_uid',u); } return u; })();
+// 毎回ちょっと違う “ねぎらい” を表示（AI不要・軽量）
+(function(){
+  const lines = [
+    "夜勤も日勤も、本当にお疲れさまです。あなたの気づきが、患者さんの安心につながっています。",
+    "忙しい中でも丁寧なケアをありがとうございます。少しでも手間を減らせるよう整えました。",
+    "体調は大丈夫ですか？無理しすぎず、休める時はしっかり休んでくださいね。作業はここでサッと終わらせましょう。"
+  ];
+  const n = Math.floor(Math.random() * lines.length);
+  document.getElementById('msg').innerHTML =
+    lines[n] + "<br>記録や画像は端末内だけで完結します。外へは出しません。";
+})();
 
-// ねぎらい（ローカル候補）
-const LOCAL_GREETINGS = [
-  "朝も夜も、みんなのために力を尽くしてくださってありがとうございます。ここでの記録は端末内で完結します。少しでも負担が軽くなるよう、そっと支えます。",
-  "連日のケア、本当にお疲れさまです。入力や確認がすっと終わるように整えました。深呼吸して、ゆっくり進めてくださいね。",
-  "忙しい現場を支えてくれてありがとう。ここではデータは外に出ません。安心して、今必要なことだけに集中してください。"
-];
-LEAD.textContent = LOCAL_GREETINGS[Math.floor(Math.random()*LOCAL_GREETINGS.length)];
-
-// サーバ起動時は優しい一言を取得して上書き
-(async ()=>{ try{
-  const r = await fetch('http://127.0.0.1:8787/ai/greet',{cache:'no-store'});
-  if(r.ok){ const js = await r.json(); if(js?.ok && js.message){ LEAD.textContent = js.message; } }
-}catch(e){} })();
-
+// 接続確認（自動遷移しない）
 async function ping(){
   try{
     await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
@@ -77,43 +63,15 @@ async function ping(){
   }catch(e){ setOK(false); return false; }
 }
 
-// はじめる：接続OK→UIへ、NG→deploy.ps1を自動DL
+// 「はじめる」を押したらだけ遷移
 document.getElementById('btnStart').addEventListener('click', async ()=>{
-  log('接続確認中…');
-  if(await ping()){
-    log('接続OK: 開きます。');
-    location.href = `http://127.0.0.1:8787/?uid=${encodeURIComponent(NURSE_UID)}`;
-  }else{
-    log('接続NG: 初回準備を開始（セットアップを保存）');
-    try{
-      const host = location.hostname;
-      const repo = (location.pathname.split('/')[1]||'').trim();
-      const user = host.replace('.github.io','');
-      const url  = `https://raw.githubusercontent.com/${user}/${repo}/main/deploy.ps1`;
-      const a=document.createElement('a'); a.href=url; a.download='deploy.ps1'; document.body.appendChild(a); a.click(); a.remove();
-      alert('deploy.ps1 をダウンロードしました。開いて「実行」してください。実行後にもう一度［はじめる］を押せば開きます。');
-    }catch(e){ alert('ダウンロードに失敗しました。配布者へご連絡ください。'); }
-  }
+  const ok = await ping();
+  if(ok){ location.href = 'http://127.0.0.1:8787/nurse_ui.html'; }
+  else { alert('アプリが起動していません。\n配布側にお知らせください。'); }
 });
 
-// 最新結果を見る（個人UIDの最終ファイルをまとめて取得）
-document.getElementById('btnShow').addEventListener('click', async ()=>{
-  if(!await ping()){ alert('まだ準備ができていません。まず［はじめる］から準備してください。'); return; }
-  try{
-    const kinds = ['assessment','diagnosis','record','careplan'];
-    const names = {assessment:'アセスメント',diagnosis:'診断',record:'記録',careplan:'計画'};
-    let out = '';
-    for(const k of kinds){
-      const r = await fetch(`http://127.0.0.1:8787/files/${k}_final.txt?uid=${encodeURIComponent(NURSE_UID)}`);
-      const t = r.ok ? await r.text() : '（まだ保存がありません）';
-      out += `【${names[k]}】\n${t.trim()||'（空です）'}\n\n`;
-    }
-    LOG.textContent = out;
-  }catch(e){ alert('取得に失敗しました。'); }
-});
-
-// ちらっと接続確認
-(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); }})();
+// 画面表示時に軽く接続状態だけ見る（遷移はしない）
+(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); } })();
 </script>
 </body>
 </html>
