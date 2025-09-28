@@ -1,80 +1,175 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>看護アシスタント — ランチャー</title>
-<style>
-  :root{--b:#E9C7D5;--p:#F7CFE3;--ph:#FACFE6}
-  *{box-sizing:border-box}
-  body{margin:0;background:#FFF7FA;color:#333;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif}
-  .wrap{max-width:860px;margin:0 auto;padding:24px}
-  h1{font-size:22px;margin:8px 0 16px}
-  section{background:#fff;border:1px solid var(--b);border-radius:12px;padding:16px;margin:16px 0}
-  .btn{display:inline-block;background:var(--p);border:1px solid #E7B6CE;border-radius:10px;padding:10px 16px;font-weight:700;text-decoration:none;color:#333}
-  .btn:hover{background:var(--ph)}
-  .muted{color:#666;font-size:13px}
-  ol{margin-top:8px}
-  code,kbd{background:#fff;border:1px solid var(--b);border-radius:6px;padding:2px 6px}
-  .row{display:flex;gap:12px;flex-wrap:wrap}
-  .card{flex:1 1 260px;border:1px solid var(--b);border-radius:12px;padding:12px;background:#fff}
-  .ok{color:#0a7}
-  .ng{color:#c33}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>看護アシスタント（PyQt5/Ollama）— ダウンロード</title>
+  <style>
+    :root{--bg:#fff7fa;--card:#fbe7f1;--ink:#333;--accent:#f7cfe3;--border:#e9c7d5}
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;}
+    header{padding:32px 16px;}
+    .wrap{max-width:960px;margin:0 auto;padding:0 16px;}
+    h1{margin:0;font-size:28px}
+    p.lead{margin:.5rem 0 0;color:#555}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:16px 0}
+    .grid{display:grid;gap:16px}
+    @media(min-width:800px){.grid{grid-template-columns:1fr 1fr}}
+    .btn{display:inline-block;text-decoration:none;background:var(--accent);border:1px solid #e7b6ce;padding:10px 14px;border-radius:10px;font-weight:700}
+    .muted{color:#666}
+    code,kbd{background:#fff;border:1px solid var(--border);border-radius:6px;padding:0 6px}
+    footer{padding:32px 16px;color:#666}
+    .hidden{display:none}
+    .os-pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 10px;background:#fff}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;}
+    .assets{display:flex;flex-wrap:wrap;gap:8px}
+    .assets a{white-space:nowrap}
+  </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>看護アシスタント（GUI）ランチャー</h1>
-  <p class="muted">※ このページは <strong>デスクトップGUI</strong> へ誘導するためのポータルです（アプリ本体の処理は一切クラウドへ送信しません。Ollamaローカル固定）。</p>
+  <header class="wrap">
+    <h1>看護アシスタント（段階レビュー）</h1>
+    <p class="lead">プライバシー徹底版：<strong>ローカルの無料AI（Ollama）固定</strong>／<strong>OpenAI 完全遮断</strong>。<br>
+      これは配布用ページです。アプリ本体は <strong>ネイティブの PyQt5</strong> で動作します（Webアプリではありません）。</p>
+  </header>
 
-  <section>
-    <h2>1) いますぐ起動（環境がある方向け）</h2>
-    <div class="row">
-      <a class="btn" href="./start_win.bat" download>Windows：起動バッチをダウンロード</a>
-      <a class="btn" href="./start_mac.command" download>macOS：起動スクリプトをダウンロード</a>
-    </div>
-    <p class="muted">ダウンロード後に実行すると <code>python nurse_app.py</code> を起動します。初回は必要パッケージのインストール案内が表示される場合があります。</p>
-  </section>
+  <main class="wrap">
+    <section class="card">
+      <h2>① ダウンロード（あなたのOSを自動判定）</h2>
+      <p class="muted">「最新リリース」を取得して、OSに合うアーカイブを提示します。</p>
+      <p>検出したOS: <span id="os-badge" class="os-pill">判定中…</span></p>
+      <p><a id="primary-link" class="btn hidden" href="#" download>このOS向けをダウンロード</a></p>
+      <div id="fallback-block" class="hidden">
+        <p class="muted">もし自動判定が合わない / 見つからない場合は、下の一覧から選んでください。</p>
+        <div id="asset-list" class="assets"></div>
+      </div>
+      <p id="status" class="muted">最新リリースを取得中…</p>
+    </section>
 
-  <section>
-    <h2>2) はじめての方（セットアップ手順）</h2>
-    <div class="card">
-      <h3>Windows</h3>
-      <ol>
-        <li>Python 3.10+ をインストール（未導入なら <a href="https://www.python.org/downloads/" target="_blank" rel="noreferrer">python.org</a>）</li>
-        <li>このリポジトリをダウンロード（もしくは <code>git clone ...</code>）</li>
-        <li>フォルダ内で <code>pip install -r requirements.txt</code></li>
-        <li><code>start_win.bat</code> を実行（または <code>python -X utf8 nurse_app.py</code>）</li>
-      </ol>
-    </div>
-    <div class="card">
-      <h3>macOS</h3>
-      <ol>
-        <li>Python 3.10+ を用意（例：<code>brew install python</code>）</li>
-        <li>このリポジトリを入手</li>
-        <li>フォルダ内で <code>pip3 install -r requirements.txt</code></li>
-        <li><code>chmod +x start_mac.command</code> → ダブルクリック（または <code>python3 -X utf8 nurse_app.py</code>）</li>
-      </ol>
-    </div>
-    <p class="muted">※ 追加ライブラリは GUI 本体に必要な <code>PyQt5</code> と、Excel閲覧用の <code>pandas</code>/<code>openpyxl</code>（任意）です。</p>
-  </section>
+    <section class="card">
+      <h2>② 使い方（解凍 → 実行）</h2>
+      <div class="grid">
+        <div>
+          <h3>Windows</h3>
+          <ol>
+            <li>ダウンロードした <code>.zip</code> を右クリック → <kbd>すべて展開</kbd></li>
+            <li>展開フォルダ内の <code>nurse_app.exe</code> または <code>nurse_app</code> をダブルクリック</li>
+            <li>初回のみ、Ollama のインストール確認が出たら <kbd>承認</kbd></li>
+          </ol>
+        </div>
+        <div>
+          <h3>macOS</h3>
+          <ol>
+            <li><code>.tar.gz</code> をダブルクリックして展開</li>
+            <li>フォルダ内の <code>nurse_app</code> を右クリック → <kbd>開く</kbd>（Gatekeeper回避）</li>
+            <li>初回のみ、Ollama のインストール確認が出たら <kbd>承認</kbd></li>
+          </ol>
+        </div>
+      </div>
+      <p class="muted">※ Python / pip は不要です。Qtを含む「配布フォルダ」を同梱しています。</p>
+    </section>
 
-  <section>
-    <h2>3) よくあるつまずき</h2>
-    <ul>
-      <li><strong>画面が出ない</strong>：Pythonのバージョン/仮想環境を確認。<code>pip show PyQt5</code> で導入確認。</li>
-      <li><strong>Ollama未導入</strong>：アプリ内で案内ダイアログが出ます。指示通りに進めると自動で入ります。</li>
-      <li><strong>Excelが見えない</strong>：<code>pandas</code>/<code>openpyxl</code> を入れるか、<code>nanda_db.xlsx</code> の配置を確認。</li>
-    </ul>
-    <p class="muted">セキュリティ上、ブラウザからデスクトップアプリを<strong>自動起動</strong>することはできません（カスタムURLスキーム等の導入が別途必要）。このページは「ダウンロード＆起動」を簡単にするためのポータルです。</p>
-  </section>
+    <section class="card">
+      <h2>③ 収録／動作について</h2>
+      <ul>
+        <li>実行ファイルは <span class="mono">PyInstaller</span> で生成</li>
+        <li>Ollama（<span class="mono">qwen2.5:7b-instruct</span>）をローカル使用、OpenAIキーは<strong>完全無効化</strong></li>
+        <li>同梱データ例：<code>nanda_db.xlsx</code>、<code>app_settings.json</code> など</li>
+      </ul>
+    </section>
 
-  <section>
-    <h2>ステータス</h2>
-    <div id="status" class="muted">ローカル起動チェックは不要です。上の手順で実行してください。</div>
-  </section>
+    <section class="card">
+      <h2>リリースページ</h2>
+      <p>手動で選ぶ場合：<a id="release-link" class="btn" href="#" target="_blank" rel="noopener">GitHub Releases を開く</a></p>
+    </section>
+  </main>
 
-  <p class="muted">© Nurse App — Local only / No OpenAI calls.</p>
-</div>
+  <footer class="wrap">
+    <small>© Nurse App. このページは配布ナビ用の静的HTMLで、アプリ本体はネイティブの PyQt5 GUI です。</small>
+  </footer>
+
+  <script>
+    // === 設定：あなたのリポジトリに置き換え ===
+    const REPO = "OWNER/REPO"; // 例: "yamada/nurse-app"
+    // =========================================
+
+    const osBadge = document.getElementById("os-badge");
+    const primaryLink = document.getElementById("primary-link");
+    const fallbackBlock = document.getElementById("fallback-block");
+    const assetList = document.getElementById("asset-list");
+    const statusEl = document.getElementById("status");
+    const releaseLink = document.getElementById("release-link");
+
+    const GH_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+    const GH_RELEASES = `https://github.com/${REPO}/releases/latest`;
+
+    releaseLink.href = GH_RELEASES;
+
+    // ---- OS 判定（ざっくり）----
+    function detectOS() {
+      const ua = navigator.userAgent.toLowerCase();
+      if (ua.includes("windows")) return "Windows";
+      if (ua.includes("mac os") || ua.includes("macos") || ua.includes("macintosh")) return "macOS";
+      if (ua.includes("linux")) return "Linux";
+      return "Unknown";
+    }
+    const myOS = detectOS();
+    osBadge.textContent = myOS;
+
+    // ---- 最新リリースのアセットを取得し、OSに合うものを提示 ----
+    async function init() {
+      try {
+        const res = await fetch(GH_API, { headers: { "Accept": "application/vnd.github+json" } });
+        if (!res.ok) throw new Error("GitHub API error " + res.status);
+        const data = await res.json();
+        const assets = data.assets || [];
+        // ワークフローで生成するファイル名の想定：
+        // nurse_app_windows.zip / nurse_app_macOS.tar.gz / nurse_app_Linux.tar.gz
+        const matchers = {
+          Windows: /windows.+\.zip$/i,
+          macOS: /macOS.+\.tar\.gz$/i,
+          Linux: /Linux.+\.tar\.gz$/i
+        };
+        const pattern = matchers[myOS];
+        let picked = null;
+
+        if (pattern) {
+          picked = assets.find(a => pattern.test(a.name));
+        }
+        // もし見つからないなら、Windows優先で適当表示（ユーザーが一覧から選べるように）
+        if (!picked && assets.length) picked = assets[0];
+
+        // プライマリボタン
+        if (picked) {
+          primaryLink.href = picked.browser_download_url;
+          primaryLink.textContent = `このOS向けをダウンロード（${picked.name}）`;
+          primaryLink.classList.remove("hidden");
+          statusEl.textContent = `最新リリース: ${data.tag_name}（${new Date(data.published_at).toLocaleString()}）`;
+        } else {
+          statusEl.textContent = "対応アセットが見つかりませんでした。下の一覧から選んでください。";
+        }
+
+        // 一覧（フォールバック）
+        if (assets.length) {
+          fallbackBlock.classList.remove("hidden");
+          assets.forEach(a => {
+            const link = document.createElement("a");
+            link.className = "btn";
+            link.href = a.browser_download_url;
+            link.textContent = a.name;
+            assetList.appendChild(link);
+          });
+        }
+      } catch (e) {
+        statusEl.textContent = "最新リリースの取得に失敗しました。Releasesページから直接ダウンロードしてください。";
+        fallbackBlock.classList.remove("hidden");
+      }
+    }
+    init();
+  </script>
+  <noscript>
+    <div class="wrap card">JavaScript を有効にすると、OS自動判定と最新リリース取得が動きます。<br>
+    手動ダウンロード: <a href="#" id="noscript-link">Releases</a></div>
+    <script>document.getElementById('noscript-link').href = `https://github.com/${REPO}/releases/latest`;</script>
+  </noscript>
 </body>
 </html>
