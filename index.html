@@ -1,77 +1,80 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>看護アシスタント | 入口</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>看護アシスタント — ランチャー</title>
 <style>
-:root{--bg:#fff7fb;--panel:#fff;--line:#ead0dc;--accent:#f59bc0;--text:#2e2a2f}
-*{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",sans-serif}
-.wrap{max-width:1100px;margin:28px auto;padding:20px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px}
-h1{font-size:46px;margin:6px 0 14px}
-.lead{font-size:20px;line-height:1.9;margin:8px 0 22px}
-.btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
-.btn:hover{filter:brightness(.98)}
-.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;margin-left:8px}
-.badge.ok{background:#e6f6ec;color:#1b7a3f}
-.badge.ng{background:#ffe2e6;color:#8f1d28}
-.small{color:#6b5a64;font-size:14px}
-hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
+  :root{--b:#E9C7D5;--p:#F7CFE3;--ph:#FACFE6}
+  *{box-sizing:border-box}
+  body{margin:0;background:#FFF7FA;color:#333;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Meiryo",sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:24px}
+  h1{font-size:22px;margin:8px 0 16px}
+  section{background:#fff;border:1px solid var(--b);border-radius:12px;padding:16px;margin:16px 0}
+  .btn{display:inline-block;background:var(--p);border:1px solid #E7B6CE;border-radius:10px;padding:10px 16px;font-weight:700;text-decoration:none;color:#333}
+  .btn:hover{background:var(--ph)}
+  .muted{color:#666;font-size:13px}
+  ol{margin-top:8px}
+  code,kbd{background:#fff;border:1px solid var(--b);border-radius:6px;padding:2px 6px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .card{flex:1 1 260px;border:1px solid var(--b);border-radius:12px;padding:12px;background:#fff}
+  .ok{color:#0a7}
+  .ng{color:#c33}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="card">
-    <h1 id="title">いつもお疲れさまです</h1>
-    <p id="msg" class="lead">
-      今日も安全と安心のために尽くしてくださって、ありがとうございます。<br>
-      ここでは、ふだんの流れのまま、入力と確認をすっと終わらせるお手伝いをします。<br>
-      記録や画像は端末内だけで完結します。外へは出しません。
-    </p>
+  <h1>看護アシスタント（GUI）ランチャー</h1>
+  <p class="muted">※ このページは <strong>デスクトップGUI</strong> へ誘導するためのポータルです（アプリ本体の処理は一切クラウドへ送信しません。Ollamaローカル固定）。</p>
 
-    <button id="btnStart" class="btn">▶ はじめる</button>
-    <span id="stat" class="badge ng">接続NG</span>
+  <section>
+    <h2>1) いますぐ起動（環境がある方向け）</h2>
+    <div class="row">
+      <a class="btn" href="./start_win.bat" download>Windows：起動バッチをダウンロード</a>
+      <a class="btn" href="./start_mac.command" download>macOS：起動スクリプトをダウンロード</a>
+    </div>
+    <p class="muted">ダウンロード後に実行すると <code>python nurse_app.py</code> を起動します。初回は必要パッケージのインストール案内が表示される場合があります。</p>
+  </section>
 
-    <hr>
-    <div class="small" id="hint">［はじめる］を押すと接続確認 → 問題なければアプリ画面を開きます。</div>
-  </div>
+  <section>
+    <h2>2) はじめての方（セットアップ手順）</h2>
+    <div class="card">
+      <h3>Windows</h3>
+      <ol>
+        <li>Python 3.10+ をインストール（未導入なら <a href="https://www.python.org/downloads/" target="_blank" rel="noreferrer">python.org</a>）</li>
+        <li>このリポジトリをダウンロード（もしくは <code>git clone ...</code>）</li>
+        <li>フォルダ内で <code>pip install -r requirements.txt</code></li>
+        <li><code>start_win.bat</code> を実行（または <code>python -X utf8 nurse_app.py</code>）</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>macOS</h3>
+      <ol>
+        <li>Python 3.10+ を用意（例：<code>brew install python</code>）</li>
+        <li>このリポジトリを入手</li>
+        <li>フォルダ内で <code>pip3 install -r requirements.txt</code></li>
+        <li><code>chmod +x start_mac.command</code> → ダブルクリック（または <code>python3 -X utf8 nurse_app.py</code>）</li>
+      </ol>
+    </div>
+    <p class="muted">※ 追加ライブラリは GUI 本体に必要な <code>PyQt5</code> と、Excel閲覧用の <code>pandas</code>/<code>openpyxl</code>（任意）です。</p>
+  </section>
+
+  <section>
+    <h2>3) よくあるつまずき</h2>
+    <ul>
+      <li><strong>画面が出ない</strong>：Pythonのバージョン/仮想環境を確認。<code>pip show PyQt5</code> で導入確認。</li>
+      <li><strong>Ollama未導入</strong>：アプリ内で案内ダイアログが出ます。指示通りに進めると自動で入ります。</li>
+      <li><strong>Excelが見えない</strong>：<code>pandas</code>/<code>openpyxl</code> を入れるか、<code>nanda_db.xlsx</code> の配置を確認。</li>
+    </ul>
+    <p class="muted">セキュリティ上、ブラウザからデスクトップアプリを<strong>自動起動</strong>することはできません（カスタムURLスキーム等の導入が別途必要）。このページは「ダウンロード＆起動」を簡単にするためのポータルです。</p>
+  </section>
+
+  <section>
+    <h2>ステータス</h2>
+    <div id="status" class="muted">ローカル起動チェックは不要です。上の手順で実行してください。</div>
+  </section>
+
+  <p class="muted">© Nurse App — Local only / No OpenAI calls.</p>
 </div>
-
-<script>
-const STAT = document.getElementById('stat');
-function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
-
-// 毎回ちょっと違う “ねぎらい” を表示（AI不要・軽量）
-(function(){
-  const lines = [
-    "夜勤も日勤も、本当にお疲れさまです。あなたの気づきが、患者さんの安心につながっています。",
-    "忙しい中でも丁寧なケアをありがとうございます。少しでも手間を減らせるよう整えました。",
-    "体調は大丈夫ですか？無理しすぎず、休める時はしっかり休んでくださいね。作業はここでサッと終わらせましょう。"
-  ];
-  const n = Math.floor(Math.random() * lines.length);
-  document.getElementById('msg').innerHTML =
-    lines[n] + "<br>記録や画像は端末内だけで完結します。外へは出しません。";
-})();
-
-// 接続確認（自動遷移しない）
-async function ping(){
-  try{
-    await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
-    setOK(true); return true;
-  }catch(e){ setOK(false); return false; }
-}
-
-// 「はじめる」を押したらだけ遷移
-document.getElementById('btnStart').addEventListener('click', async ()=>{
-  const ok = await ping();
-  if(ok){ location.href = 'http://127.0.0.1:8787/nurse_ui.html'; }
-  else { alert('アプリが起動していません。\n配布側にお知らせください。'); }
-});
-
-// 画面表示時に軽く接続状態だけ見る（遷移はしない）
-(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); } })();
-</script>
 </body>
 </html>
