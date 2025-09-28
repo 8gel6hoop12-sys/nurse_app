@@ -1,10 +1,26 @@
 # -*- coding: utf-8 -*-
 """
-diagnosis.py — 候補は“あり得るもの”を広く拾いつつ、
-性別/年齢/明白カテゴリは厳格除外 → 緩い話題足切り → 上位K件のみAI（coarse→fine）
-→ 総合スコア(加点方式・上限なし)でランキング。
-入力は assessment_final.txt と（あれば）S/Oの素テキストのみ。
-UI側は変更不要：テーブルの「スコア」列には総合スコアを出力。
+diagnosis.py — 高速版（ラベル主導スクリーニング + 壁時計締切 + 予算付き並列 + キャッシュ堅牢化）
+
+【推奨 .env（必要に応じて調整）】
+# 軽量量子化モデル（未導入なら: ollama pull qwen2.5:7b-instruct-q4_K_M）
+OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M
+OLLAMA_BASE=http://127.0.0.1:11434
+
+# AIにかける候補件数・並列・各フェーズの時間予算
+DIAG_AI_TOPK=16
+DIAG_COARSE_CONCURRENCY=3
+DIAG_FINE_CONCURRENCY=2
+DIAG_COARSE_BUDGET_SEC=6
+DIAG_FINE_BUDGET_SEC=8
+
+# 全体の壁時計（秒）。超えそうなら以降のAIは打ち切って返す
+DIAG_WALL_SEC=25
+
+# 足切り強化（ラベル未一致は厳しめ）
+DIAG_MIN_DEF_SIM=0.08
+DIAG_MIN_RULE=0.50
+DIAG_STRICT_LABEL_PASS=1
 """
 
 from __future__ import annotations
@@ -33,19 +49,19 @@ AI_CACHE_FN  = "diagnosis_ai_cache.json"
 
 # ========= パラメータ（必要なら環境変数で上書き） =========
 # AI
-AI_TOPK            = int(os.getenv("DIAG_AI_TOPK", "40"))     # AIを当てる上限
+AI_TOPK            = int(os.getenv("DIAG_AI_TOPK", "16"))     # coarse/fine に回す上限
 COARSE_MIN_PASS    = float(os.getenv("DIAG_COARSE_MIN_PASS", "0.30"))
 FINE_MIN_PASS      = float(os.getenv("DIAG_FINE_MIN_PASS",   "0.35"))
 
-COARSE_CONCURRENCY = int(os.getenv("DIAG_COARSE_CONCURRENCY", "4"))
-FINE_CONCURRENCY   = int(os.getenv("DIAG_FINE_CONCURRENCY",   "3"))
-COARSE_BUDGET_SEC  = float(os.getenv("DIAG_COARSE_BUDGET_SEC", "0"))
-FINE_BUDGET_SEC    = float(os.getenv("DIAG_FINE_BUDGET_SEC",   "0"))
+COARSE_CONCURRENCY = int(os.getenv("DIAG_COARSE_CONCURRENCY", "3"))
+FINE_CONCURRENCY   = int(os.getenv("DIAG_FINE_CONCURRENCY",   "2"))
+COARSE_BUDGET_SEC  = float(os.getenv("DIAG_COARSE_BUDGET_SEC", "6"))
+FINE_BUDGET_SEC    = float(os.getenv("DIAG_FINE_BUDGET_SEC",   "8"))
 AI_SNIPPET_CHARS   = int(os.getenv("DIAG_AI_SNIPPET", "1500"))
 
 # 話題足切り（弱め）
-MIN_DEF_SIM_KEEP    = float(os.getenv("DIAG_MIN_DEF_SIM", "0.05"))
-MIN_RULE_SCORE_KEEP = float(os.getenv("DIAG_MIN_RULE",    "0.60"))
+MIN_DEF_SIM_KEEP    = float(os.getenv("DIAG_MIN_DEF_SIM", "0.08"))
+MIN_RULE_SCORE_KEEP = float(os.getenv("DIAG_MIN_RULE",    "0.50"))
 
 # 出力
 SHOW_N              = int(os.getenv("DIAG_SHOW_N", "40"))     # 画面テキストの最大表示
@@ -57,6 +73,7 @@ STRICT_SEX_FILTER   = True
 STRICT_AGE_FILTER   = True
 STRICT_CATEGORY     = True
 STRICT_CARETARGET   = True
+STRICT_LABEL_PASS   = os.getenv("DIAG_STRICT_LABEL_PASS", "0") == "1"
 
 # ルール寄与・ペナルティ（加点方式、スコア目安：上位~10点台）
 W_DEF_SIM     = 2.0   # 定義ベクトル類似
@@ -75,9 +92,12 @@ P_CONTRADICT       = 1.0
 TOKEN_MINLEN       = int(os.getenv("DIAG_TOKEN_MINLEN", "2"))
 FUZZY_THRESHOLD    = float(os.getenv("DIAG_FUZZY_TH", "0.86"))
 
+# 壁時計（全体上限）
+WALL_SEC          = float(os.getenv("DIAG_WALL_SEC", "25"))
+
 # ========= Ollama =========
 OLLAMA_BASE   = os.getenv("OLLAMA_BASE",  "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_MODEL  = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+OLLAMA_MODEL  = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct-q4_K_M")
 CONNECT_TO    = float(os.getenv("OLLAMA_CONNECT_TIMEOUT", "5"))
 READ_TO       = float(os.getenv("OLLAMA_READ_TIMEOUT",    "20"))
 RETRY         = int(os.getenv("OLLAMA_RETRY",             "1"))
@@ -205,7 +225,7 @@ CATEGORY_KW = {
     "排泄": ["排尿","排便","失禁","尿閉","便秘","下痢","ストーマ","カテーテル","尿量"],
     "栄養": ["栄養","食事","食欲","経口","嚥下","摂食","摂取","飲水","脱水","経管","BMI","体重"],
     "活動/ADL": ["歩行","移動","ADL","更衣","起居","セルフケア","活動","耐久","リハ","PT","OT","ST"],
-    "睡眠/休息": ["睡眠","不眠","入眠","中途覚醒","休息","昼夜逆転"],
+    "睡眠/休息": ["睡眠","不眠","入眠","中途覚醒","早朝覚醒","休息","昼夜逆転"],
     "安全": ["転倒","転落","誤嚥","出血リスク","皮膚損傷","褥瘡","感染予防","安全","拘束"],
     "疼痛": ["痛み","疼痛","NRS","鎮痛"],
     "皮膚/創傷": ["褥瘡","発赤","びらん","皮膚","スキン","創部","創傷","ドレッシング","滲出"],
@@ -216,12 +236,6 @@ CATEGORY_KW = {
     "コミュニケーション": ["コミュニケーション","意思疎通","聴力","視力","言語"],
     "手術/周術期": ["術前","術後","手術","麻酔","POD","ドレーン","創部"],
 }
-
-def parse_setting(text: str) -> set:
-    t=nfkc(text); hits=set()
-    for k,lst in SETTING_KW.items():
-        if any(w in t for w in lst): hits.add(k)
-    return hits
 
 def extract_categories_from_text(text: str) -> set:
     t=nfkc(text); cats=set()
@@ -237,6 +251,12 @@ def extract_categories_from_row(row: dict) -> set:
     ])
     return extract_categories_from_text(src)
 
+def parse_setting(text: str) -> set:
+    t=nfkc(text); hits=set()
+    for k,lst in SETTING_KW.items():
+        if any(w in t for w in lst): hits.add(k)
+    return hits
+
 def parse_demo(text: str) -> Dict[str, Any]:
     t=nfkc(text)
     sex=None
@@ -249,6 +269,63 @@ def parse_demo(text: str) -> Dict[str, Any]:
         except: pass
     has_family = bool(re.search(r"家族|妻|夫|母|父|娘|息子|介護者|保護者|親|配偶者", t))
     return {"sex":sex,"age":age,"has_family":has_family}
+
+# ========= 課題ラベル展開（ラベル主導の高速スクリーニング） =========
+_LABEL_EXPAND_CACHE_FN = "label_expand_cache.json"
+def _load_label_cache():
+    p=Path(_LABEL_EXPAND_CACHE_FN)
+    if p.exists():
+        try: return json.loads(p.read_text(encoding="utf-8"))
+        except: return {}
+    return {}
+def _save_label_cache(c: dict):
+    try: Path(_LABEL_EXPAND_CACHE_FN).write_text(json.dumps(c,ensure_ascii=False,indent=2),encoding="utf-8")
+    except: pass
+_LABEL_CACHE = _load_label_cache()
+
+LABEL_SEED_MAP = {
+    "睡眠": ["睡眠","不眠","入眠困難","中途覚醒","早朝覚醒","熟眠感低下","眠れない","寝れない","眠りが浅い","昼夜逆転","睡眠不足","日中傾眠"],
+    "疼痛": ["痛み","疼痛","NRS","創部痛","胸痛","腹痛","腰痛","頭痛","鎮痛","疼痛増悪"],
+    "呼吸": ["呼吸困難","息苦しさ","息切れ","呼吸苦","SpO2","酸素","喘鳴","RR","呼吸音"],
+    "循環": ["血圧","SBP","DBP","MAP","脈拍","HR","冷感","ショック","出血"],
+    "栄養": ["食欲低下","摂食量低下","食事摂取","飲水","脱水","経管","BMI"],
+    "不安": ["不安","心配","緊張","恐怖","落ち着かない"],
+    "皮膚": ["皮膚障害","褥瘡","発赤","びらん","創傷","滲出"],
+}
+
+SYNONYMS={
+    "疼痛":["痛い","痛み","苦痛","圧痛","腰痛","腹痛","胸痛","頭痛","創部痛","痛覚過敏"],
+    "呼吸困難":["息苦しさ","息切れ","呼吸苦","呼吸困難感","起坐呼吸","労作時呼吸困難"],
+    "不安":["心配","落ち着かない","そわそわ","緊張","恐れ","恐怖"],
+    "倦怠感":["だるい","疲労","しんどい","易疲労","脱力"],
+    "脱水":["口渇","尿量低下","皮膚乾燥","尿濃縮","飲水不足"],
+    "転倒リスク":["ふらつき","歩行不安定","易転倒","失神既往"],
+    "嚥下障害":["dysphagia","誤嚥","むせ","咽頭残留","嚥下機能低下"],
+    "睡眠":["不眠","眠れない","寝れない","中途覚醒","熟眠感低下","睡眠不足","日中傾眠","入眠困難","早朝覚醒","眠りが浅い","昼夜逆転"],
+}
+
+def expand_label_to_queries(label_hint: str) -> list[str]:
+    key = nfkc(label_hint).strip().lower()
+    if not key: return []
+    if key in _LABEL_CACHE: return _LABEL_CACHE[key]
+    seeds = LABEL_SEED_MAP.get(key, [])
+    for k, v in LABEL_SEED_MAP.items():
+        if k in key or key in k: seeds += v
+    if key in SYNONYMS: seeds += SYNONYMS[key]
+    seen, out = set(), []
+    for s in (seeds or [key]):
+        s = nfkc(s).strip()
+        if s and s not in seen:
+            seen.add(s); out.append(s)
+    _LABEL_CACHE[key] = out; _save_label_cache(_LABEL_CACHE)
+    return out
+
+def extract_label_hints_from_text(text: str) -> set:
+    t = nfkc(text); hits=set()
+    for k, terms in LABEL_SEED_MAP.items():
+        if any(w in t for w in ([k]+terms)): hits.add(k)
+    hits |= extract_categories_from_text(text)  # 既存カテゴリも流用
+    return hits
 
 # ========= トークン/曖昧一致 =========
 KANJI=r"[一-龥]"; KATA=r"[ァ-ヶー]"; HIRA=r"[ぁ-ん]"; EN=r"[A-Za-z]"; NUM=r"[0-9]"
@@ -280,22 +357,6 @@ def split_terms(s: str) -> List[str]:
         if t not in seen: seen.add(t); out.append(t)
     return out
 
-SYNONYMS={
-    "疼痛":["痛い","痛み","苦痛","圧痛","腰痛","腹痛","胸痛","頭痛","創部痛","痛覚過敏"],
-    "呼吸困難":["息苦しさ","息切れ","呼吸苦","呼吸困難感","起坐呼吸","労作時呼吸困難"],
-    "不安":["心配","落ち着かない","そわそわ","緊張","恐れ","恐怖"],
-    "倦怠感":["だるい","疲労","しんどい","易疲労","脱力"],
-    "脱水":["口渇","尿量低下","皮膚乾燥","尿濃縮","飲水不足"],
-    "転倒リスク":["ふらつき","歩行不安定","易転倒","失神既往"],
-    "嚥下障害":["dysphagia","誤嚥","むせ","咽頭残留","嚥下機能低下"],
-}
-
-def expand_terms(term: str) -> List[str]:
-    t=nfkc(term); out={t}
-    for k,vs in SYNONYMS.items():
-        if t==k or t in vs: out.update([k]+vs)
-    return list(out)
-
 # “正常/陰性”を見分ける簡易極性（語の前後±12文字に否定/良好語）
 OK_WORDS=r"(?:なし|ない|良好|維持|保た|正常|安定|問題なし|みられず|陰性|改善)"
 BAD_WORDS=r"(?:悪化|不良|低下|障害|困難|不足|増悪|異常|陽性|上昇|低下|増加)"
@@ -315,7 +376,8 @@ def fuzzy_hits_with_polarity(text_norm: str, terms: List[str]) -> Tuple[List[str
     pos=[]; ok=[]
     toks=text_norm.split()
     for term in terms:
-        exps=expand_terms(term)
+        exps=[term]
+        if term in SYNONYMS: exps += SYNONYMS[term]
         found_idx=-1
         # 文字列包含
         for e in exps:
@@ -339,7 +401,6 @@ def fuzzy_hits_with_polarity(text_norm: str, terms: List[str]) -> Tuple[List[str
             if _is_ok_window(text_norm, found_idx):
                 ok.append(term)
             else:
-                # “悪化/低下..”等が近いなら肯定扱いを強める
                 pos.append(term)
     # 重複除去
     pos_u=[]; seen=set()
@@ -432,7 +493,7 @@ def _trim_assess(src: str, limit: int = AI_SNIPPET_CHARS) -> str:
     core=m.group(0) if m else t
     return (core[:limit]+"…") if len(core)>limit else core
 
-def _ollama_chat(system: str, user: str, num_pred: int = 80) -> str:
+def _ollama_chat(system: str, user: str, num_pred: int = 40) -> str:
     try:
         r=_post(OLLAMA_BASE+"/api/chat", {
             "model": OLLAMA_MODEL, "stream": False,
@@ -453,7 +514,7 @@ def _ollama_chat(system: str, user: str, num_pred: int = 80) -> str:
     except Exception:
         return ""
 
-def ask_ollama_json(system: str, user: str, num_pred: int = 80) -> Optional[dict]:
+def ask_ollama_json(system: str, user: str, num_pred: int = 40) -> Optional[dict]:
     for i in range(RETRY+1):
         try:
             txt=_ollama_chat(system, user, num_pred=num_pred)
@@ -486,7 +547,7 @@ def ai_coarse(assess: str, label: str, definition: str) -> float:
     key=coarse_key(assess,label,definition)
     if key in _CACHE["coarse"]: return float(_CACHE["coarse"][key])
     if not ollama_available(): return 0.0
-    data=ask_ollama_json(AI_SYS_COARSE, f"【看護診断】{label}\n【定義】{definition}\n\n【アセスメント本文（要旨）】\n{_trim_assess(assess)}", 80) or {}
+    data=ask_ollama_json(AI_SYS_COARSE, f"【看護診断】{label}\n【定義】{definition}\n\n【アセスメント本文（要旨）】\n{_trim_assess(assess)}", 40) or {}
     score=float(data.get("score",0.0) or 0.0)
     _CACHE["coarse"][key]=score
     return score
@@ -505,7 +566,7 @@ def ai_fine(assess: str, label: str, definition: str, dc_terms: List[str], rf_te
         f"【危険因子リスト】{', '.join(rk_terms) if rk_terms else '（なし）'}\n\n"
         "【アセスメント本文（要旨）】\n"+_trim_assess(assess)
     )
-    data=ask_ollama_json(AI_SYS_FINE, user, 80) or {}
+    data=ask_ollama_json(AI_SYS_FINE, user, 40) or {}
     score=float(data.get("score",0.0) or 0.0)
     matched=data.get("matched",{}) or {}
     ev={"診断指標":[nfkc(x).strip() for x in matched.get("診断指標",[]) if str(x).strip()],
@@ -533,10 +594,6 @@ def parse_vitals(text: str) -> Dict[str, Optional[float]]:
     return {"T":T,"HR":HR,"RR":RR,"SpO2":SpO2,"SBP":SBP,"DBP":DBP,"MAP":MAP,"NRS":NRS}
 
 def score_match_blocks(text: str, row: Dict[str,Any]) -> Tuple[float, Dict[str,List[str]], List[str]]:
-    """
-    文字/同義/定義語による曖昧一致(+近接で正常/陰性は除外)を加点し、
-    根拠ブロック(loose)と reasons を返す。
-    """
     t=norm(text); reasons=[]
     dc_terms=split_terms(row.get("defining_characteristics",""))
     rf_terms=split_terms(row.get("related_factors",""))
@@ -628,8 +685,13 @@ def penalty_contradict(assess: str, row: dict) -> Tuple[float,str]:
         return P_CONTRADICT, "疼痛所見/語彙が弱い"
     return 0.0, ""
 
-# ========= 収集・選抜 =========
+# ========= 収集・選抜（高速化の肝） =========
 def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
+    # 壁時計締切
+    deadline = time.time() + WALL_SEC if WALL_SEC > 0 else None
+    def time_left():
+        return (deadline - time.time()) if deadline else 9999
+
     tnorm=norm(assess)
     assess_tokens=tokenize(tnorm)
     idfmap, def_vecs = build_definition_space(rows)
@@ -639,12 +701,32 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
     settings = parse_setting(assess)
     text_cats= extract_categories_from_text(assess)
 
+    # 課題ラベル（本文）→ 検索語（同義含む）を作る
+    label_hints = extract_label_hints_from_text(assess)
+    expanded_norm = set()
+    for h in label_hints:
+        expanded_norm |= {norm(q) for q in expand_label_to_queries(h)}
+
     # 事前スコア（定義類似 + ルール粗計算）
     pre=[]
     for i,r in enumerate(rows):
         def_sim=cos_dict(assess_vec, def_vecs[i])
         rule_raw, _, _ = score_match_blocks(assess, r)
         pre.append((i, def_sim, rule_raw))
+
+    # ラベル一致の強化：診断名/定義に課題語が何個入るか
+    label_boost = [0.0]*len(rows)
+    label_pass  = [True]*len(rows)
+    if expanded_norm:
+        for i, r in enumerate(rows):
+            txt = norm((r.get("label","")+" "+r.get("definition","")).strip())
+            hits = sum(1 for q in expanded_norm if q and q in txt)
+            if hits >= 3:   label_boost[i] = 1.6
+            elif hits == 2: label_boost[i] = 1.0
+            elif hits == 1: label_boost[i] = 0.5
+            else:
+                # ラベルが本文にあるのに候補側に全然出てこないなら、弱ければ落とす
+                label_pass[i] = (not STRICT_LABEL_PASS)
 
     # 厳格フィルタ
     hard_ok=[True]*len(rows); cat_reason=[""]*len(rows)
@@ -660,22 +742,30 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
     eligible=[i for i in range(len(rows)) if hard_ok[i]]
     if not eligible: eligible=list(range(len(rows)))
 
-    # 緩い足切り
+    # 緩い足切り（+ ラベル未一致で def/rule が弱いものは落とす）
     kept=[]
     for i,ds,rs in pre:
         if i not in eligible: continue
+        if not label_pass[i] and (ds < (MIN_DEF_SIM_KEEP*1.2) and rs < (MIN_RULE_SCORE_KEEP*1.2)):
+            continue
         if ds < MIN_DEF_SIM_KEEP and rs < MIN_RULE_SCORE_KEEP:
             continue
         kept.append(i)
     if not kept: kept = eligible
 
+    # さらに “早い見積り” で上位 ~300 だけ残す（巨大Excel対策）
+    def quick_score_local(i):
+        ds, rr = pre[i][1], pre[i][2]
+        return 0.6*ds + 0.4*min(1.0, rr/4.0) + 0.2*label_boost[i]
+    kept = sorted(kept, key=quick_score_local, reverse=True)[:300]
+
     # 上位K件にAI
     def quick_score(i):
         ds, rr = pre[i][1], pre[i][2]
         bonus = W_CAT_MATCH if cat_reason[i].startswith("OK: カテゴリ一致") else 0.0
-        return 0.6*ds + 0.4*min(1.0, rr/4.0) + 0.1*bonus
+        return 0.6*ds + 0.4*min(1.0, rr/4.0) + 0.1*bonus + 0.2*label_boost[i]
 
-    order=sorted(kept, key=lambda i: quick_score(i), reverse=True)
+    order=sorted(kept, key=quick_score, reverse=True)
     ai_targets=set(order[:AI_TOPK]) if AI_TOPK>0 else set()
 
     ai_coarse_s=[0.0]*len(rows)
@@ -683,14 +773,15 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
         r=rows[i]
         return i, ai_coarse(assess, r.get("label",""), r.get("definition",""))
 
-    if ai_targets and ollama_available():
+    if ai_targets and ollama_available() and (time_left() > 1.0):
         futures=[]
         with ThreadPoolExecutor(max_workers=max(1, COARSE_CONCURRENCY)) as ex:
             for i in ai_targets: futures.append(ex.submit(task_coarse, i))
-            end=(time.time()+COARSE_BUDGET_SEC) if COARSE_BUDGET_SEC>0 else None
-            for fut in as_completed(futures, timeout=None if end is None else max(1,int(COARSE_BUDGET_SEC))):
+            end = time.time() + min(COARSE_BUDGET_SEC or 9e9, max(1.0, time_left()))
+            for fut in as_completed(futures, timeout=max(0.1, end - time.time())):
+                if time.time() >= end: break
                 try:
-                    i,s=fut.result(timeout=None if end is None else max(0.1,end-time.time()))
+                    i,s=fut.result(timeout=max(0.1, end - time.time()))
                     ai_coarse_s[i]=float(s)
                 except Exception: pass
 
@@ -714,7 +805,7 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
 
         p1,w1 = penalty_setting(r, settings)
         p3,w3 = penalty_contradict(assess, r)
-        # ヒット弱は“減点”（除外はしない）
+        # ヒット弱は“減点”
         dc_hits = len(loose.get("診断指標",[])) + len((ai_ev or {}).get("診断指標",[]))
         rk_hits = len(loose.get("危険因子",[])) + len((ai_ev or {}).get("危険因子",[]))
         p2,w2 = (0.0,"")
@@ -724,13 +815,13 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
             p2,w2 = P_MIN_HITS_WEAK, f"診断指標ヒット弱({dc_hits}/1)"
         penalty = p1+p2+p3
 
-        # 総合スコア（加点方式）
         total = (
             W_FINE_AI   * s_fine +
             W_COARSE_AI * s_coarse +
             W_DEF_SIM   * ds +
             rule_raw +
-            (W_CAT_MATCH if (ok_cat and why_cat and "一致" in why_cat) else 0.0)
+            (W_CAT_MATCH if (ok_cat and why_cat and "一致" in why_cat) else 0.0) +
+            label_boost[i]
         ) - penalty
 
         # “関連あり”の判定（強めに）
@@ -754,7 +845,7 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
             "ai_coarse": float(s_coarse),
             "ai_sim": float(s_fine),
             "ai_ev": ai_ev or {"診断指標":[],"関連因子":[],"危険因子":[]},
-            # メタ（UIは読まなくてもOK）
+            # メタ
             "primary_focus": r.get("primary_focus",""),
             "secondary_focus": r.get("secondary_focus",""),
             "care_target": r.get("care_target",""),
@@ -768,10 +859,10 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
             "class": r.get("class",""),
             "judge": r.get("judge",""),
             "priority_hint": r.get("priority_hint",""),
-            # UI用フィールド：
+            # UI用フィールド
             "related": related,
-            "soft_score": round(total, 3),   # 内部名
-            "score": round(total, 3),        # ← UIの「スコア」列はこの値を表示
+            "soft_score": round(total, 3),
+            "score": round(total, 3),
         }
 
     def task_fine(i):
@@ -782,14 +873,15 @@ def collect(assess: str, rows: List[Dict[str,Any]]) -> List[Dict[str,Any]]:
         s,ev=ai_fine(assess, r.get("label",""), r.get("definition",""), dc, rf, rk)
         return i,s,ev
 
-    if fine_pool:
+    if fine_pool and (time_left() > 1.0):
         futures=[]
         with ThreadPoolExecutor(max_workers=max(1,FINE_CONCURRENCY)) as ex:
             for i in fine_pool: futures.append(ex.submit(task_fine,i))
-            end=(time.time()+FINE_BUDGET_SEC) if FINE_BUDGET_SEC>0 else None
-            for fut in as_completed(futures, timeout=None if end is None else max(1,int(FINE_BUDGET_SEC))):
+            end = time.time() + min(FINE_BUDGET_SEC or 9e9, max(1.0, time_left()))
+            for fut in as_completed(futures, timeout=max(0.1, end - time.time())):
+                if time.time() >= end: break
                 try:
-                    i,s,ev=fut.result(timeout=None if end is None else max(0.1,end-time.time()))
+                    i,s,ev=fut.result(timeout=max(0.1, end - time.time()))
                     out[i]=build_cand(i, ai_coarse_s[i], s, ev)
                 except Exception: pass
 
@@ -867,12 +959,12 @@ def main():
 
     lines=[]
     lines.append("="*100)
-    lines.append(f"NANDA-I 看護診断 候補（性別/年齢 厳格・カテゴリは明確NGのみ除外・TOPKだけAI） {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    lines.append(f"NANDA-I 看護診断 候補（高速版: ラベル主導 + 予算制御 + 壁時計） {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append("="*100)
     lines.append(f"[入力] {ASSESS_FINAL_TXT} (+ S/O があれば反映)")
     lines.append(f"[Excel] {NANDA_XLSX}（キャッシュ利用: {Path(ROWS_CACHE).exists()}）")
     lines.append(f"[設定] AI_TOPK={AI_TOPK}, coarse≥{COARSE_MIN_PASS}, fine≥{FINE_MIN_PASS}, "
-                 f"MIN_DEF_SIM_KEEP={MIN_DEF_SIM_KEEP}, MIN_RULE_SCORE_KEEP={MIN_RULE_SCORE_KEEP}, SHOW_N={SHOW_N}")
+                 f"MIN_DEF_SIM_KEEP={MIN_DEF_SIM_KEEP}, MIN_RULE_SCORE_KEEP={MIN_RULE_SCORE_KEEP}, SHOW_N={SHOW_N}, WALL_SEC={WALL_SEC}")
     lines.append("")
 
     if not cands:
@@ -892,13 +984,12 @@ def main():
     out="\n".join(lines).rstrip()+"\n"
     print(out); write_text(RESULT_TXT, out); print(f"[SAVE] {RESULT_TXT}")
 
-    # JSON は “候補”をそのまま。UIは c['score'] をテーブルに出す
     j={
         "meta":{
             "input": ASSESS_FINAL_TXT,
             "excel": NANDA_XLSX,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "ranking": "score(= ai_fine*Wf + ai_coarse*Wc + def_sim*Wd + rule_raw + bonuses - penalties)",
+            "ranking": "score(= ai_fine*Wf + ai_coarse*Wc + def_sim*Wd + rule_raw + bonuses(label,category) - penalties)",
             "ollama_model": OLLAMA_MODEL,
             "ollama_ok": ollama_available(),
             "ai_topk": AI_TOPK,
@@ -911,6 +1002,10 @@ def main():
         "candidates": cands
     }
     write_text(RESULT_JSON, json.dumps(j, ensure_ascii=False, indent=2)); print(f"[SAVE] {RESULT_JSON}")
+
+    # 成功時もキャッシュを保存（2回目以降をさらに速く）
+    try: save_cache(_CACHE)
+    except: pass
 
 if __name__=="__main__":
     try:

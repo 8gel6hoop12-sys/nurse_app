@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-assessment_fast.py  (UI refresh + better screening narrative)
+assessment.py  (fast + wide term coverage + age/sex-aware)
 
 S/O自由記述 → 自動で S/O を分配 → 抽出/解析 → 2種類の本文を連結出力。
 - 出力1: 従来フォーマットの包括アセスメント（S/O原文は非表示）
 - 出力2: 工程版（スクリーン → 詳細 → 分析 → クラスタ → 候補 → 優先 → ワイズマン4段テンプレ段落）
 - 追加: ゴードン11 & ヘンダーソン14 を“具体語句ベース”で自動生成（AI分類＋ルール補完）
 - 追加: 身長/体重から BMI を自動算出＆区分付与
-- 追加: AI（Ollama）で 原因/誘因/強み/将来像 を推測（使えない時はローカル補完）
+- 追加: AI（Ollama）で 原因/誘因/強み/将来像 を推測（不可時はローカル補完）※LLM呼び出しは1回＆キャッシュ
 - 強化: 全角→半角正規化、バイタル抽出の網羅性、Wiseman段落IndexError対策
-- 強化(UI): 参考評価を ↑/↓/↔ の簡潔表記に変更（凡例1行のみ）
-- 強化(UI): スクリーニングアセスメントをサンプル本風のまとまり文＋要点箇条書きで出力
+- 強化: 参考評価を ↑/↓/↔ の簡潔表記
+- 強化: スクリーニングアセスメントをサンプル本風のまとまり文＋要点箇条書き
+- 高速化: 事前コンパイル正規表現、ALLの正規化結果の再利用、Ollama応答キャッシュ、AI呼び出し統合（1回）
 
 保存:
   assessment_result.txt …… 本文2本（包括→工程）
@@ -18,8 +19,8 @@ S/O自由記述 → 自動で S/O を分配 → 抽出/解析 → 2種類の本�
   assessment_review.txt …… クイックサマリ
 
 CLI例:
-  python assessment_fast.py --so "S: 息苦しい… O: SpO2 92% HR 108 T 38.1 BP 98/56 NRS 7 尿量 0.3 mL/kg/h"
-  python assessment_fast.py --s "S記述..." --o "O記述..."
+  python assessment.py --so "S: 息苦しい… O: SpO2 92% HR 108 T 38.1 BP 98/56 NRS 7 尿量 0.3 mL/kg/h"
+  python assessment.py --s "S記述..." --o "O記述..."
 環境例:
   pip install requests
   set OLLAMA_MODEL=llama3:latest
@@ -27,7 +28,7 @@ CLI例:
 """
 from __future__ import annotations
 
-import re, os, json, argparse
+import re, os, json, argparse, hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
@@ -42,7 +43,7 @@ def ollama_base() -> str:
 def ollama_model() -> str:
     return os.getenv("OLLAMA_MODEL", "llama3:latest")
 
-def ollama_available(timeout: float = 1.2) -> bool:
+def ollama_available(timeout: float = 1.0) -> bool:
     try:
         r = requests.get(f"{ollama_base()}/api/tags", timeout=timeout)
         return r.status_code == 200
@@ -63,8 +64,45 @@ def ollama_chat(system: str, user: str, num_predict: int = 512, temp: float = 0.
     js = r.json()
     return js.get("message", {}).get("content", "") or js.get("response", "")
 
+# ---- 簡易ディスクキャッシュ（LLM応答） --------------------------------------
+def _cache_path() -> Path:
+    return Path(".ollama_cache.json")
+
+def _load_cache() -> dict:
+    p = _cache_path()
+    if p.exists():
+        try:
+            return json.load(p.open("r", encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _save_cache(d: dict):
+    try:
+        json.dump(d, _cache_path().open("w", encoding="utf-8"), ensure_ascii=False)
+    except Exception:
+        pass
+
+def ollama_cached_chat(system: str, user: str, **kw) -> str:
+    key_src = json.dumps({"model": ollama_model(), "system": system, "user": user, "kw": kw}, ensure_ascii=False)
+    key = hashlib.md5(key_src.encode("utf-8")).hexdigest()
+    cache = _load_cache()
+    if key in cache:
+        return cache[key]
+    ans = ollama_chat(system, user, **kw)
+    cache[key] = ans
+    _save_cache(cache)
+    return ans
+
+# ========== 事前コンパイル ==========
+RE_NUM = re.compile(r"(\d+(?:\.\d+)?)", re.I)
+RE_BP  = re.compile(r"\b(\d{2,3})\s*/\s*(\d{2,3})\b")
+RE_VIT_PAT = re.compile(r"(?:\bBT|\b(?<![A-Z])T[:=]?\s*\d|\b体温|\bHR\b|\bP(?![a-z])|\bPulse|\b脈拍\b|\bRR\b|\b呼吸数\b|\bSpO?2\b|\bSat\b|\bサチュ\b|血圧|BP|SBP|DBP|MAP|NRS|\d{2,3}\s*/\s*\d{2,3})", re.I)
+RE_OBJ_KW  = re.compile(r"(?:所見|検査|発赤|腫脹|圧痛|反跳痛|筋性防御|聴診|打診|触診|皮膚|チアノーゼ|胸部|腹部|X線|CT|採血|尿量)", re.I)
+RE_SUBJ_KW = re.compile(r"(?:訴え|痛い|辛い|だるい|しびれ|吐き気|悪心|食欲|眠れ|不安|こわい|息苦しい|下痢|便秘|ふらつき|めまい|発熱感|寒気|悪寒|むかむか)", re.I)
+
 # ========== 全体テキスト・抽出用 ==========
-S = ""; O = ""; ALL = ""
+S = ""; O = ""; ALL = ""; ALL_NORM = ""
 
 meta: Dict[str, Any] = {}
 behav: Dict[str, bool] = {}
@@ -136,15 +174,10 @@ def smart_split_so(so_text: str) -> Tuple[str, str]:
         if cur=="O": o_buf.append(ln); continue
         undecided.append(ln)
 
-    # RR/HR の混同を避ける正規表現
-    vit_pat = r"(?:\bBT|\b(?<![A-Z])T[:=]?\s*\d|\b体温|\bHR\b|\bP(?![a-z])|\bPulse|\b脈拍\b|\bRR\b|\b呼吸数\b|\bSpO?2\b|\bSat\b|\bサチュ\b|血圧|BP|SBP|DBP|MAP|NRS|\d{2,3}\s*/\s*\d{2,3})"
-    obj_kw  = r"(?:所見|検査|発赤|腫脹|圧痛|反跳痛|筋性防御|聴診|打診|触診|皮膚|チアノーゼ|胸部|腹部|X線|CT|採血|尿量)"
-    subj_kw = r"(?:訴え|痛い|辛い|だるい|しびれ|吐き気|悪心|食欲|眠れ|不安|こわい|息苦しい|下痢|便秘|ふらつき|めまい|発熱感|寒気|悪寒|むかむか)"
-
     def classify(ln: str) -> str:
-        if re.search(vit_pat,ln) or re.search(obj_kw,ln): return "O"
-        if re.search(subj_kw,ln): return "S"
-        if re.search(r"\d",ln) and re.search(r"(?:%|mmHg|mL|L/min|/h|/分|回)", ln): return "O"
+        if RE_VIT_PAT.search(ln) or RE_OBJ_KW.search(ln): return "O"
+        if RE_SUBJ_KW.search(ln): return "S"
+        if re.search(r"\d",ln) and re.search(r"(?:%|mmHg|mL|L/min|/h|/分|回)", ln, flags=re.I): return "O"
         return "S"
 
     for ln in undecided: (o_buf if classify(ln)=="O" else s_buf).append(ln)
@@ -161,12 +194,12 @@ def smart_split_so(so_text: str) -> Tuple[str, str]:
 def parse_all():
     global meta, behav, facts, sites, quals, assoc, PRIO, NEWS2, SPO2_TARGET, PAIN_GOAL
 
-    ALL_norm = normalize_text(ALL)
+    ALL_norm = ALL_NORM
 
     meta = {
         "background": fstr(r"(?:^|[\n\r])\s*背景\s*[:：]\s*(.+)", ALL_norm),
         "age"  : fnum(r"(?:年齢|Age)\s*[:：]?\s*" + NUM, ALL_norm),
-        "sex"  : fstr(r"(?:性別|Sex)\s*[:：]?\s*(男性|女性|男|女)", ALL_norm),
+        "sex"  : fstr(r"(?:性別|Sex)\s*[:：]?\s*(男性|女性|男|女|Male|Female|male|female|M|F)", ALL_norm),
         "living": fstr(r"(独居|同居|一人暮らし|在宅|施設入所)", ALL_norm),
         "job"  : fstr(r"(?:職業|仕事)\s*[:：]?\s*(.+)", ALL_norm),
         "dx"   : fstr(r"(?:既往|診断|主病名)\s*[:：]?\s*(.+)", ALL_norm),
@@ -206,7 +239,7 @@ def parse_all():
     facts["RR"]   = fnum(r"(?:\bRR\b|呼吸数)\s*[:=]?\s*"+NUM, ALL_norm)
     facts["SpO2"] = fnum(r"(?:SpO2|SPO2|Sat|ｻﾁｭ|サチュ|酸素飽和度)\s*[:=]?\s*"+NUM, ALL_norm)
 
-    m_bp = re.search(r"\b(\d{2,3})\s*/\s*(\d{2,3})\b", ALL_norm)
+    m_bp = RE_BP.search(ALL_norm)
     facts["SBP"]  = fnum(r"(?:SBP|収縮期|上の血圧|BP\s*[:=]?)\s*"+NUM, ALL_norm) or (sfloat(m_bp.group(1)) if m_bp else None)
     facts["DBP"]  = fnum(r"(?:DBP|拡張期|下の血圧)\s*[:=]?\s*"+NUM, ALL_norm) or (sfloat(m_bp.group(2)) if m_bp else None)
     facts["MAP"]  = fnum(r"(?:MAP)\s*[:=]?\s*"+NUM, ALL_norm)
@@ -297,7 +330,7 @@ def _annotate_term_compact(term: str) -> str:
         t = f"{t}[{lab}]"
     return t
 
-# ========== AI 一括（原因/誘因/強み/将来像 + ゴードン/ヘンダーソン要約） ==========
+# ========== AI 一括（原因/誘因/強み/将来像 + 用語分類配列） ==========
 def parse_json_loose(s: str) -> Dict[str, Any]:
     m = re.search(r"\{.*\}", s, flags=re.S)
     try:
@@ -308,73 +341,56 @@ def parse_json_loose(s: str) -> Dict[str, Any]:
 def ai_all_in_one() -> Dict[str, Any]:
     base = {
         "causes": [], "aggravators": [], "strengths": [],
-        "trajectory": "", "gordon": {}, "henderson": {}, "paragraph": ""
+        "trajectory": "",
+        "gordon_terms": {},
+        "henderson_terms": {},
+        "paragraph": ""
     }
-    if os.getenv("FAST_MODE","0")=="1" or (not ollama_available(1.2)):
+    if os.getenv("FAST_MODE","0")=="1" or (not ollama_available(1.0)):
         return base
 
     system = "あなたは日本語の臨床看護アセスメント支援AI。出力は必ずJSONのみ。簡潔・具体。"
+    sex_txt = str(meta.get("sex") or "")
+    age_txt = str(int(meta["age"])) if meta.get("age") is not None else ""
+
+    schema = {
+        "causes": [],
+        "aggravators": [],
+        "strengths": [],
+        "trajectory": "",
+        "gordon_terms": {k: [] for k in ["健康認識・健康管理","栄養・代謝","排泄","活動・運動","睡眠・休息","認知・知覚","自己知覚・自己概念","役割・関係","性・生殖","コーピング/ストレス耐性","価値・信念"]},
+        "henderson_terms": {k: [] for k in [f"{i}{n}" for i, n in enumerate(["呼吸","食事・水分","排泄","移動・体位","睡眠・休息","衣服の着脱","体温調節","身体清潔・整容","危険回避","コミュニケーション","信仰・価値","仕事・達成","遊び・余暇","学習・成長"], start=1)]}
+    }
+
     user = (
-        "次のS/Oを読み、以下を日本語で推定しJSONで返す。過度な想像は避け、入力にない事実は書かない。\n"
-        "{\n"
-        "  \"causes\": [\"原因/病態の推定(最大3)\"],\n"
-        "  \"aggravators\": [\"誘因/増悪因子(最大2)\"],\n"
-        "  \"strengths\": [\"強み(最大3)\"],\n"
-        "  \"trajectory\": \"将来像の短文\",\n"
-        "  \"gordon\": {\"健康認識・健康管理\":\"…\",\"栄養・代謝\":\"…\",\"排泄\":\"…\",\"活動・運動\":\"…\",\"睡眠・休息\":\"…\",\"認知・知覚\":\"…\",\"自己知覚・自己概念\":\"…\",\"役割・関係\":\"…\",\"性・生殖\":\"…\",\"コーピング/ストレス耐性\":\"…\",\"価値・信念\":\"…\"},\n"
-        "  \"henderson\": {\"1呼吸\":\"…\",\"2食事・水分\":\"…\",\"3排泄\":\"…\",\"4移動・体位\":\"…\",\"5睡眠・休息\":\"…\",\"6衣服の着脱\":\"…\",\"7体温調節\":\"…\",\"8身体清潔・整容\":\"…\",\"9危険回避\":\"…\",\"10コミュニケーション\":\"…\",\"11信仰・価値\":\"…\",\"12仕事・達成\":\"…\",\"13遊び・余暇\":\"…\",\"14学習・成長\":\"…\"}\n"
-        "}\n"
+        "次のS/Oを読み、入力に**実在する語句のみ**を短いフレーズで抜粋して、"
+        "ゴードン11/ヘンダーソン14に**最大各8語句**まで広めに分類して返してください。"
+        "推測語は禁止。JSONのみ。\n"
+        f"性別:{sex_txt} 年齢:{age_txt}\n"
         "【S】\n"+(S[:4000] or "")+"\n【O】\n"+(O[:4000] or "")+"\n"
-        "短く具体に。空欄は作らない。"
+        + json.dumps(schema, ensure_ascii=False)
+        + "\nさらに causes/aggravators/strengths/trajectory も簡潔に。"
     )
     try:
-        raw = ollama_chat(system, user, num_predict=512, temp=0.1, timeout=40)
+        raw = ollama_cached_chat(system, user, num_predict=600, temp=0.1, timeout=35)
         js = parse_json_loose(raw)
         for k in base:
             if k in js: base[k] = js[k]
+        if not base["gordon_terms"] and isinstance(js.get("gordon"), dict):
+            base["gordon_terms"] = {k: ([js["gordon"][k]] if js["gordon"].get(k) else []) for k in js["gordon"]}
+        if not base["henderson_terms"] and isinstance(js.get("henderson"), dict):
+            base["henderson_terms"] = {k: ([js["henderson"][k]] if js["henderson"].get(k) else []) for k in js["henderson"]}
     except Exception:
         pass
     return base
 
-# ========== 語句のAI分類 & ルール補完 ==========
-def _parse_json_dict(s: str) -> Dict[str, Any]:
-    m = re.search(r"\{.*\}", s, flags=re.S)
-    try:
-        return json.loads(m.group(0) if m else "{}")
-    except Exception:
-        return {}
-
-def ai_classify_terms_from_SO() -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
-    if not ollama_available(1.2) or os.getenv("FAST_MODE","0") == "1":
-        return {}, {}
-    system = (
-        "あなたは日本語の看護アセスメント分類AIです。出力は必ずJSONのみ。"
-        "SとOの本文に実際に登場する語句だけを短いフレーズで抜粋し、"
-        "ゴードン11領域とヘンダーソン14項目に振り分けてください。"
-        "新しい事実や推測語は書かないでください。最大でも各5語句。"
-        "語句は入力文字列の一部をそのまま転写してください。"
-    )
-    keys_g = ["健康認識・健康管理","栄養・代謝","排泄","活動・運動","睡眠・休息",
-              "認知・知覚","自己知覚・自己概念","役割・関係","性・生殖",
-              "コーピング/ストレス耐性","価値・信念"]
-    keys_h = [f"{i}{n}" for i, n in enumerate(
-        ["呼吸","食事・水分","排泄","移動・体位","睡眠・休息","衣服の着脱","体温調節",
-         "身体清潔・整容","危険回避","コミュニケーション","信仰・価値",
-         "仕事・達成","遊び・余暇","学習・成長"], start=1)]
-    schema = {"gordon": {k:[] for k in keys_g}, "henderson": {k:[] for k in keys_h}}
-    user = "【S】\n"+(S[:3500] or "")+"\n【O】\n"+(O[:3500] or "")+"\n"+json.dumps(schema, ensure_ascii=False)
-    try:
-        js = _parse_json_dict(ollama_chat(system, user, num_predict=700, temp=0.1, timeout=50))
-        return js.get("gordon", {}) or {}, js.get("henderson", {}) or {}
-    except Exception:
-        return {}, {}
-
+# ========== 語句のルール補完（語彙拡大＋年齢/性別反映） ==========
 def _phrases_from_text(txt: str) -> List[str]:
     t = normalize_text(txt)
     parts = re.split(r"[。；;、,\n\r/]|・|\s{2,}", t)
     return [p.strip() for p in parts if p.strip()]
 
-def _add_term(mp: Dict[str, List[str]], key: str, term: str, limit: int = 6):
+def _add_term(mp: Dict[str, List[str]], key: str, term: str, limit: int = 8):
     if not term: return
     L = mp.setdefault(key, [])
     if term not in L and len(L) < limit:
@@ -384,6 +400,15 @@ def harvest_terms_rule_based() -> Tuple[Dict[str, List[str]], Dict[str, List[str
     g: Dict[str, List[str]] = {}
     h: Dict[str, List[str]] = {}
     phrases = _phrases_from_text(S + "\n" + O)
+
+    age = meta.get("age")
+    sex = (meta.get("sex") or "").strip()
+    is_female = sex in ("女性","女","female","Female","F")
+    is_male   = sex in ("男性","男","male","Male","M")
+    is_older  = (age is not None and age >= 75)
+    is_child  = (age is not None and age < 15)
+
+    # バイタルの転写
     if facts.get("SpO2") is not None:
         _add_term(g, "認知・知覚", f"SpO2 {int(facts['SpO2'])}%")
         _add_term(h, "1呼吸", f"SpO2 {int(facts['SpO2'])}%")
@@ -398,50 +423,69 @@ def harvest_terms_rule_based() -> Tuple[Dict[str, List[str]], Dict[str, List[str
     if facts.get("NRS") is not None:
         _add_term(g, "認知・知覚", f"NRS {int(facts['NRS'])}")
 
+    # 語彙拡大
     KW_G = {
-        "健康認識・健康管理": ["受診","服薬","自己管理","血圧手帳","指導","通院","既往","高血圧","糖尿","喘息"],
-        "栄養・代謝": ["食欲","摂取","飲水","体重","嘔気","悪心","嘔吐","脱水"],
-        "排泄": ["便秘","下痢","排尿","尿","失禁","残尿","夜間頻尿","便"],
-        "活動・運動": ["歩行","ふらつき","易疲労","ADL","起立","横になる","階段","呼吸困難"],
-        "睡眠・休息": ["不眠","眠れ","中途覚醒","熟睡","睡眠"],
-        "認知・知覚": ["痛み","しびれ","めまい","視力","聴力","感覚","NRS"],
-        "自己知覚・自己概念": ["不安","心配","抑うつ","怖い"],
-        "役割・関係": ["家族","同居","独居","仕事","介護"],
-        "性・生殖": ["妊娠","月経","性","更年期"],
-        "コーピング/ストレス耐性": ["自己対処","様子見","相談","コール","支援要請"],
-        "価値・信念": ["宗教","信仰","価値","希望"],
+        "健康認識・健康管理": ["受診","服薬","自己管理","血圧手帳","指導","通院","既往","高血圧","糖尿","喘息","COPD","心不全","腎不全","CKD","透析","抗凝固","ステロイド","ワクチン","禁煙","継続観察"],
+        "栄養・代謝": ["食欲","摂取","飲水","体重","嘔気","悪心","嘔吐","脱水","経口","経管","IVH","TPN","浮腫","口渇","発汗"],
+        "排泄": ["便秘","下痢","排尿","尿","失禁","残尿","夜間頻尿","便","尿勢低下","排尿痛","血尿"],
+        "活動・運動": ["歩行","ふらつき","易疲労","ADL","起立","階段","呼吸困難","動くとつらい","SOB","離床","リハビリ"],
+        "睡眠・休息": ["不眠","眠れ","中途覚醒","熟睡","睡眠","早朝覚醒","日中傾眠"],
+        "認知・知覚": ["痛み","しびれ","めまい","視力","聴力","感覚","NRS","しみる","締め付け","灼熱感","放散","違和感"],
+        "自己知覚・自己概念": ["不安","心配","抑うつ","怖い","落ち込む","イライラ","セルフイメージ"],
+        "役割・関係": ["家族","同居","独居","仕事","介護","支援者","キーパーソン","育児","学業"],
+        "性・生殖": ["妊娠","月経","性","更年期","PMS","ED","前立腺"],
+        "コーピング/ストレス耐性": ["自己対処","様子見","相談","コール","支援要請","呼び鈴","セルフケア","情報収集"],
+        "価値・信念": ["宗教","信仰","価値","希望","人生観","最善の利益"]
     }
     KW_H = {
-        "1呼吸": ["呼吸","息苦","咳","痰","喘鳴","SpO2","サチュ"],
-        "2食事・水分": ["食事","食欲","摂取","飲水","水分"],
-        "3排泄": ["便秘","下痢","排尿","尿","失禁","便"],
-        "4移動・体位": ["歩行","起立","体位","ふらつき","杖","車椅子","横にな"],
-        "5睡眠・休息": ["不眠","眠れ","中途覚醒","睡眠"],
-        "6衣服の着脱": ["着替え","衣服"],
-        "7体温調節": ["体温","発熱","寒気","悪寒"],
-        "8身体清潔・整容": ["清拭","入浴","整容","爪切り","清潔"],
-        "9危険回避": ["転倒","危険","誤嚥","服薬","血圧","脈拍"],
-        "10コミュニケーション": ["会話","伝達","コミュニケ","連絡"],
-        "11信仰・価値": ["宗教","信仰","価値"],
-        "12仕事・達成": ["仕事","職業","復職"],
-        "13遊び・余暇": ["趣味","余暇","レジャー"],
-        "14学習・成長": ["指導","教育","学習","セルフケア"],
+        "1呼吸": ["呼吸","息苦","咳","痰","喘鳴","SpO2","サチュ","SOB","呼吸音","努力呼吸"],
+        "2食事・水分": ["食事","食欲","摂取","飲水","水分","嚥下","誤嚥","食形態","栄養補助"],
+        "3排泄": ["便秘","下痢","排尿","尿","失禁","便","尿意","便意","便性状","腹満"],
+        "4移動・体位": ["歩行","起立","体位","ふらつき","杖","車椅子","横になる","寝返り","可動域","関節痛"],
+        "5睡眠・休息": ["不眠","眠れ","中途覚醒","睡眠","早朝覚醒","昼夜逆転"],
+        "6衣服の着脱": ["着替え","衣服","更衣","手指巧緻性"],
+        "7体温調節": ["体温","発熱","寒気","悪寒","発汗","ホットフラッシュ"],
+        "8身体清潔・整容": ["清拭","入浴","整容","爪切り","清潔","口腔ケア","フケ","脂漏"],
+        "9危険回避": ["転倒","危険","誤嚥","服薬","血圧","脈拍","せん妄","徘徊","自傷","暴言"],
+        "10コミュニケーション": ["会話","伝達","コミュニケ","連絡","理解","聴取","言語","通訳"],
+        "11信仰・価値": ["宗教","信仰","価値","文化"],
+        "12仕事・達成": ["仕事","職業","復職","就学","タスク達成"],
+        "13遊び・余暇": ["趣味","余暇","レジャー","散歩","テレビ","読書"],
+        "14学習・成長": ["指導","教育","学習","セルフケア","退院指導","家族教育"],
     }
+
+    # 年齢/性別の影響（語彙に追加）
+    if is_female:
+        _add_term(KW_G, "性・生殖", "産婦人科受診")
+    if is_male:
+        _add_term(KW_G, "性・生殖", "前立腺肥大")
+    if is_older:
+        for k in ("4移動・体位","9危険回避"):
+            _add_term(KW_H, k, "転倒リスク")
+        _add_term(KW_G, "活動・運動", "起立性低血圧")
+    if is_child:
+        _add_term(KW_H, "1呼吸", "ぜんそく様症状")
+        _add_term(KW_G, "栄養・代謝", "哺乳/離乳")
+
+    # マッチング
     for ph in phrases:
         for k, kws in KW_G.items():
-            if any(w in ph for w in kws): _add_term(g, k, ph)
+            if any(w in ph for w in kws): _add_term(g, k, ph, limit=8)
         for k, kws in KW_H.items():
-            if any(w in ph for w in kws): _add_term(h, k, ph)
+            if any(w in ph for w in kws): _add_term(h, k, ph, limit=8)
 
     if meta.get("background"):
         _add_term(g, "健康認識・健康管理", meta["background"])
         _add_term(g, "役割・関係", meta["background"])
 
+    if age is not None: _add_term(g, "役割・関係", f"年齢 {int(age)}歳")
+    if sex:            _add_term(g, "性・生殖",   f"性別 {sex}")
+
     return g, h
 
-# ========== ゴードン/ヘンダーソン 出力（UIシンプル版） ==========
+# ========== ゴードン/ヘンダーソン 出力 ==========
 def _summary_rule_based() -> Tuple[Dict[str,str], Dict[str,str]]:
-    text = normalize_text(ALL)
+    text = ALL_NORM
     g: Dict[str, str] = {}; h: Dict[str, str] = {}
     def _has(*k): return any(kw in text for kw in k)
 
@@ -504,7 +548,7 @@ def _summary_rule_based() -> Tuple[Dict[str,str], Dict[str,str]]:
     return g, h
 
 def build_gordon_concrete(ai: Dict[str,Any]) -> str:
-    ai_g, _ = ai_classify_terms_from_SO()
+    ai_g = ai.get("gordon_terms") or {}
     rule_g, _ = harvest_terms_rule_based()
     g_sum, _ = _summary_rule_based()
 
@@ -525,7 +569,7 @@ def build_gordon_concrete(ai: Dict[str,Any]) -> str:
     return "\n".join(lines)
 
 def build_henderson_concrete(ai: Dict[str,Any]) -> str:
-    _, ai_h = ai_classify_terms_from_SO()
+    ai_h = ai.get("henderson_terms") or {}
     _, rule_h = harvest_terms_rule_based()
     _, h_sum = _summary_rule_based()
 
@@ -570,6 +614,8 @@ def background_sentence() -> str:
     if meta.get("allergy"): bits.append("ｱﾚﾙｷﾞ:"+str(meta["allergy"]))
     if meta.get("job"): bits.append("職業/役割:"+str(meta["job"]))
     if meta.get("BMI") is not None: bits.append(f"BMI:{meta['BMI']:.1f}（{meta['BMI_class']}）")
+    if meta.get("sex"): bits.append(f"性別:{meta['sex']}")
+    if meta.get("age") is not None: bits.append(f"年齢:{int(meta['age'])}歳")
     return "、".join(bits) if bits else "背景の特記は現時点で未把握"
 
 def symptoms_sentence() -> str:
@@ -608,7 +654,7 @@ def build_screening_sections() -> str:
     g_sum, h_sum = _summary_rule_based()
     mg = g_sum.get("健康認識・健康管理","")
     if any([meta.get("background"), mg, meta.get("meds"), meta.get("dx")]):
-        sent = _join_nonempty("。", 
+        sent = _join_nonempty("。",
             background_sentence(),
             ("受療/服薬: "+ meta["meds"]) if meta.get("meds") else "",
             ("既往: "+ meta["dx"]) if meta.get("dx") else ""
@@ -760,7 +806,6 @@ def build_engineered_body(ai: Dict[str,Any]) -> str:
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
     L.append(f"＝ 看護アセスメント（工程版） {now} ＝\n")
 
-    # ← ここをサンプル本風のブロックに刷新
     L.append("◆スクリー二ングアセスメント\n" + build_screening_sections() + "\n")
 
     L.append("◆詳細アセスメント（示唆ある場合）")
@@ -805,6 +850,8 @@ def build_final_checklist() -> str:
     L.append(f"- 主要バイタル: {fmt_vitals()}")
     L.append(f"- 優先度: {PRIO}")
     if meta.get("BMI") is not None: L.append(f"- BMI: {meta['BMI']:.1f}（{meta['BMI_class']}）")
+    if meta.get("sex"): L.append(f"- 性別: {meta['sex']}")
+    if meta.get("age") is not None: L.append(f"- 年齢: {int(meta['age'])}歳")
     L.append(f"- 目標: SpO₂≧{int(SPO2_TARGET)}%, 疼痛NRS≦{PAIN_GOAL}")
     beh = behavior_sentence()
     L.append("- 行動傾向: " + (beh if beh else "未評価"))
@@ -831,10 +878,11 @@ def _mix_texts(s_text: Optional[str], o_text: Optional[str], so_text: Optional[s
     return "\n".join(pieces).strip()
 
 def build_from_SO_any(s_text: Optional[str]=None, o_text: Optional[str]=None, so_text: Optional[str]=None) -> str:
-    global S, O, ALL
+    global S, O, ALL, ALL_NORM
     mix = _mix_texts(s_text, o_text, so_text)
     S, O = smart_split_so(mix) if mix else ("","")
     ALL  = (S + "\n" + O).strip()
+    ALL_NORM = normalize_text(ALL)
     parse_all()
     ai = ai_all_in_one()
     legacy = build_legacy_body(ai)
@@ -860,6 +908,8 @@ def main():
     ap.add_argument("--fast", action="store_true", help="AIを使わない高速モード（FAST_MODE=1 と同義）")
     args = ap.parse_args()
     if args.fast: os.environ["FAST_MODE"]="1"
+    # ※ 高速デフォルトにしたい場合は次の行を有効化
+    # else: os.environ.setdefault("FAST_MODE","1")
 
     if args.s is None and args.o is None and args.so is None:
         print("\n" + "="*92)
