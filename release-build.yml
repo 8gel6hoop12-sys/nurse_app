@@ -1,0 +1,87 @@
+name: Build & Release nurse_app
+
+on:
+  push:
+    tags:
+      - "v*.*.*"   # v1.0.0 のようなタグをpushすると配布物を作成
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            py: "3.11"
+          - os: macos-latest
+            py: "3.11"
+          - os: ubuntu-latest
+            py: "3.11"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Show versions
+        run: |
+          python -V
+          pyinstaller --version
+          pip list
+
+      - name: Build (PyInstaller)
+        run: |
+          pyinstaller nurse_app.spec
+
+      - name: Archive Artifacts
+        if: runner.os == 'Windows'
+        run: |
+          powershell Compress-Archive -Path dist\\nurse_app\\* -DestinationPath nurse_app_windows.zip
+        shell: pwsh
+
+      - name: Archive Artifacts (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist && tar -czf ../nurse_app_${{ runner.os }}.tar.gz nurse_app && cd ..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nurse_app_${{ runner.os }}
+          path: |
+            nurse_app_windows.zip
+            nurse_app_macOS.tar.gz
+            nurse_app_Linux.tar.gz
+          if-no-files-found: ignore
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
