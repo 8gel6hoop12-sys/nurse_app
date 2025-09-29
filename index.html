@@ -2,122 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>看護アシスタント（PyQt5/Ollama）— はじめる</title>
+  <title>看護アシスタント 起動ページ</title>
   <style>
-    :root{--bg:#fff7fa;--card:#fbe7f1;--ink:#333;--accent:#f7cfe3;--border:#e9c7d5}
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP","Hiragino Kaku Gothic ProN",Meiryo,sans-serif}
-    .wrap{max-width:980px;margin:0 auto;padding:24px 16px}
-    header{padding:24px 0}
-    h1{margin:0 0 8px;font-size:28px}
-    p.lead{margin:0;color:#555}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin:16px 0}
-    .btn{display:inline-block;text-decoration:none;background:var(--accent);border:1px solid #e7b6ce;padding:12px 16px;border-radius:10px;font-weight:700}
-    .os-pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 10px;background:#fff;margin-left:.5rem}
-    .muted{color:#666}
-    details{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px}
-    code,kbd{background:#fff;border:1px solid var(--border);border-radius:6px;padding:0 6px}
-    .grid{display:grid;gap:16px}
-    @media(min-width:840px){.grid{grid-template-columns:1fr 1fr}}
-    .checklist{margin:0;padding-left:18px}
-    .inline-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-    .badge{border:1px solid var(--border);background:#fff;border-radius:999px;padding:4px 10px}
-    footer{padding:24px 0;color:#666}
+    body {font-family: sans-serif; background:#f5f7fa; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;}
+    .box {background:white; padding:30px; border-radius:12px; text-align:center; box-shadow:0 4px 16px rgba(0,0,0,.1);}
+    h1 {margin-bottom:20px;}
+    a.btn {display:inline-block; padding:14px 24px; margin:10px; background:#6c9; color:white; font-weight:bold; border-radius:8px; text-decoration:none;}
+    a.btn:hover {opacity:0.9;}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>看護アシスタント（段階レビュー）</h1>
-      <p class="lead">プライバシー徹底版：<strong>ローカルAI（Ollama）固定</strong>／<strong>OpenAI 完全遮断</strong>。ネイティブの PyQt5 アプリです。</p>
-    </header>
-
-    <section class="card">
-      <h2>今すぐはじめる <span id="os" class="os-pill">OS判定中…</span></h2>
-      <p>最初の1回だけ、超軽量の「ランチャー」をダウンロードしてください。以後はランチャーが自動で最新版をダウンロード・起動します。</p>
-      <p><a id="cta" class="btn" href="#" download>ランチャーをダウンロード</a></p>
-      <div class="inline-badges">
-        <span class="badge">ダウンロード1回だけ</span>
-        <span class="badge">自動アップデート（Releases）</span>
-        <span class="badge">OpenAIキー不要</span>
-        <span class="badge">データは端末内のみ</span>
-      </div>
-      <details>
-        <summary>うまく起動しないとき</summary>
-        <div class="grid">
-          <div>
-            <h4>Windows</h4>
-            <ol class="checklist">
-              <li>ダウンロードした <code>NurseApp-Launcher.ps1</code> を右クリック→<kbd>実行</kbd> か、PowerShellで<br>
-                <code>powershell -ExecutionPolicy Bypass -File .\NurseApp-Launcher.ps1</code></li>
-              <li>ブロック表示が出たら <kbd>詳細情報 → 実行</kbd></li>
-            </ol>
-          </div>
-          <div>
-            <h4>macOS / Linux</h4>
-            <ol class="checklist">
-              <li>ターミナルで：<br>
-                <code>chmod +x nurseapp-launcher.sh && ./nurseapp-launcher.sh</code></li>
-              <li>macOSで「開発元未確認」が出たら、<kbd>右クリック → 開く</kbd> を選択</li>
-            </ol>
-          </div>
-        </div>
-      </details>
-    </section>
-
-    <section class="card">
-      <h2>安心ポイント</h2>
-      <ul class="checklist">
-        <li><strong>プライバシー徹底：</strong>AIは端末内の <code>Ollama</code> のみ。通信鍵は不要、OpenAIは完全遮断。</li>
-        <li><strong>1クリック体験：</strong>ランチャーが最新版の配布パッケージ（Releases）を自動取得・展開・起動。</li>
-        <li><strong>改変なし：</strong><code>nurse_app.py</code> 含むアプリ本体の機能は従来どおり。</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h2>手動ダウンロード</h2>
-      <p><a id="releases" class="btn" target="_blank" rel="noopener">GitHub Releases を開く</a></p>
-      <p class="muted">配布パッケージ名（想定）：<code>nurse_app_windows.zip</code> / <code>nurse_app_macOS.tar.gz</code> / <code>nurse_app_Linux.tar.gz</code></p>
-    </section>
-
-    <footer>
-      <small>© Nurse App — このページは配布ナビ（静的HTML）。アプリ本体はネイティブ PyQt5 GUI です。</small>
-    </footer>
+  <div class="box">
+    <h1>看護アシスタント</h1>
+    <p>はじめての方はこちらをクリックしてください。</p>
+    <p><a class="btn" href="setup.bat">初回セットアップ</a></p>
+    <p>2回目以降の方は直接こちらから。</p>
+    <p><a class="btn" href="Start.bat">アプリを起動</a></p>
   </div>
-
-  <script>
-    // ====== あなたのリポ情報に変更 ======
-    const REPO = "OWNER/REPO";       // 例: "yamada/nurse-app"
-    const BRANCH = "main";            // Pages が main の場合
-    // ==================================
-
-    const osSpan = document.getElementById("os");
-    const cta = document.getElementById("cta");
-    const releases = document.getElementById("releases");
-    releases.href = `https://github.com/${REPO}/releases/latest`;
-
-    function detectOS(){
-      const ua = navigator.userAgent.toLowerCase();
-      if(ua.includes("windows")) return "Windows";
-      if(ua.includes("mac os") || ua.includes("macintosh")) return "macOS";
-      if(ua.includes("linux")) return "Linux";
-      return "Unknown";
-    }
-    const os = detectOS();
-    osSpan.textContent = os;
-
-    // ランチャーはリポジトリ内の raw を直接配布（軽量・署名不要）
-    const RAW = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/bootstrap`;
-    const links = {
-      Windows: `${RAW}/windows/NurseApp-Launcher.ps1`,
-      macOS: `${RAW}/macos/nurseapp-launcher.sh`,
-      Linux: `${RAW}/linux/nurseapp-launcher.sh`,
-      Unknown: `https://github.com/${REPO}/releases/latest`
-    };
-    cta.href = links[os] || links.Unknown;
-    cta.download = "";
-    cta.textContent = (os in links) ? "ランチャーをダウンロード" : "Releases を開く";
-  </script>
 </body>
 </html>
