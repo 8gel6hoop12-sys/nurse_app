@@ -20,7 +20,7 @@ h1{font-size:46px;margin:6px 0 14px}
 .small{color:#6b5a64;font-size:14px}
 hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 .links{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
-a.dl{display:inline-block;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;text-decoration:none}
+a.dl{display:inline-block;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;text-decoration:none;cursor:pointer}
 </style>
 </head>
 <body>
@@ -28,47 +28,154 @@ a.dl{display:inline-block;padding:12px 16px;border:1px solid var(--line);border-
   <div class="card">
     <h1 id="title">いつもお疲れさまです</h1>
     <p id="msg" class="lead">
-      夜勤も日勤も、本当にお疲れさまです。少しでも手間が減るように、ここからサッと起動できます。<br>
-      記録や画像は端末内だけで完結します。外へは出しません。
+      ここからサッと起動できます。記録や画像は端末内だけで完結し、外へは出しません。
     </p>
 
     <button id="btnStart" class="btn">▶ はじめる</button>
     <span id="stat" class="badge ng">接続NG</span>
 
-    <div class="links">
-      <a class="dl" href="/files/setup_win.bat" download>Windows 初回セットアップ</a>
-      <a class="dl" href="/files/start_win.bat" download>Windows 起動ボタン</a>
-      <a class="dl" href="/files/setup_mac.sh" download>macOS 初回セットアップ</a>
-      <a class="dl" href="/files/start_mac.sh" download>macOS 起動ボタン</a>
-      <a class="dl" href="/nanda.xlsx" download>NANDA Excel（任意）</a>
+    <div class="links" style="margin-top:16px">
+      <a class="dl" id="dlSetupWin">Windows 初回セットアップ（.bat）</a>
+      <a class="dl" id="dlStartWin">Windows 起動ボタン（.bat）</a>
+      <a class="dl" id="dlSetupMac">macOS 初回セットアップ（.sh）</a>
+      <a class="dl" id="dlStartMac">macOS 起動ボタン（.sh）</a>
+      <a class="dl" id="dlNanda">NANDA Excel（任意）</a>
     </div>
 
     <hr>
     <div class="small" id="hint">
-      ［はじめる］を押すと接続確認 → 問題なければアプリ画面を開きます。<br>
-      初回は OS に合わせて「初回セットアップ」をダウンロード → ダブルクリックしてください。
+      ［はじめる］は <code>http://127.0.0.1:8787/</code> に接続できればアプリ画面を開きます。<br>
+      初回は OS に合わせて「初回セットアップ」を保存 → ダブルクリックしてください。
     </div>
   </div>
 </div>
 
 <script>
+const LOCAL = "http://127.0.0.1:8787";
 const STAT = document.getElementById('stat');
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
 async function ping(){
   try{
-    await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
+    await fetch(LOCAL + '/ai/health',{mode:'no-cors',cache:'no-store'});
     setOK(true); return true;
   }catch(e){ setOK(false); return false; }
 }
 
+// 汎用ダウンロード（サーバにあれば取得/なければローカル生成）
+async function smartDownload(filename, serverPath, fallbackText) {
+  // 1) まずサーバに取りに行く
+  try{
+    const r = await fetch(LOCAL + serverPath, {cache:'no-store'});
+    if (r.ok) {
+      const blob = await r.blob();
+      triggerSave(blob, filename);
+      return;
+    }
+  }catch(e){ /* サーバに届かない → フォールバック */ }
+  // 2) フォールバック（ブラウザ内で生成）
+  const blob = new Blob([fallbackText], {type: guessMime(filename)});
+  triggerSave(blob, filename);
+}
+
+function guessMime(fn){
+  if (fn.endsWith('.bat')) return 'application/octet-stream';
+  if (fn.endsWith('.sh'))  return 'application/x-sh';
+  if (fn.endsWith('.txt')) return 'text/plain;charset=utf-8';
+  if (fn.endsWith('.json'))return 'application/json;charset=utf-8';
+  if (fn.endsWith('.xlsx'))return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return 'application/octet-stream';
+}
+
+function triggerSave(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// ----- スクリプト内容（フォールバック用） -----
+const BAT_SETUP =
+`@echo off
+setlocal
+cd /d "%~dp0"
+cd ..
+echo [1/4] venv 準備…
+if not exist ".venv" (
+  py -3 -m venv .venv || (echo venv作成失敗 & pause & exit /b 1)
+)
+echo [2/4] pip アップグレード…
+".venv\\Scripts\\python.exe" -m pip install -U pip
+echo [3/4] 依存インストール…
+".venv\\Scripts\\python.exe" -m pip install -r requirements.txt
+echo [4/4] サーバ起動…
+start "" "${LOCAL}/"
+".venv\\Scripts\\python.exe" nurse_server.py --port 8787
+pause
+`;
+
+const BAT_START =
+`@echo off
+setlocal
+cd /d "%~dp0"
+cd ..
+if not exist ".venv\\Scripts\\python.exe" (
+  echo 初回セットアップが必要です。setup_win.bat を先に実行してください。
+  pause
+  exit /b 1
+)
+start "" "${LOCAL}/"
+".venv\\Scripts\\python.exe" nurse_server.py --port 8787
+`;
+
+const SH_SETUP =
+`#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+python3 -m venv .venv
+./.venv/bin/python -m pip install -U pip
+./.venv/bin/python -m pip install -r requirements.txt
+open "${LOCAL}/" 2>/dev/null || true
+./.venv/bin/python nurse_server.py --port 8787
+`;
+
+const SH_START =
+`#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+if [ ! -x ".venv/bin/python" ]; then
+  echo "初回セットアップが必要です。setup_mac.sh を先に実行してください。"
+  exit 1
+fi
+open "${LOCAL}/" 2>/dev/null || true
+./.venv/bin/python nurse_server.py --port 8787
+`;
+
+// クリックでスマートDL
+document.getElementById('dlSetupWin').onclick = ()=> smartDownload('setup_win.bat','/files/setup_win.bat', BAT_SETUP);
+document.getElementById('dlStartWin').onclick = ()=> smartDownload('start_win.bat','/files/start_win.bat', BAT_START);
+document.getElementById('dlSetupMac').onclick = ()=> smartDownload('setup_mac.sh','/files/setup_mac.sh', SH_SETUP);
+document.getElementById('dlStartMac').onclick = ()=> smartDownload('start_mac.sh','/files/start_mac.sh', SH_START);
+// NANDA はサーバにないと作れないため、到達できる時だけ
+document.getElementById('dlNanda').onclick = async ()=>{
+  try{
+    const r = await fetch(LOCAL + '/nanda.xlsx', {cache:'no-store'});
+    if (!r.ok) throw new Error('not ok');
+    const blob = await r.blob();
+    triggerSave(blob, 'nanda_db.xlsx');
+  }catch(e){ alert('サーバに接続できません。後で［はじめる］から起動後に再度ダウンロードしてください。'); }
+};
+
+// はじめる
 document.getElementById('btnStart').addEventListener('click', async ()=>{
   const ok = await ping();
-  if(ok){ location.href = 'http://127.0.0.1:8787/nurse_ui.html'; }
-  else { alert('アプリが起動していません。\n「起動ボタン」をダウンロードして実行してください。'); }
+  if(ok){ location.href = LOCAL + '/nurse_ui.html'; }
+  else { alert('アプリが起動していません。\n「初回セットアップ」または「起動ボタン」を実行してください。'); }
 });
 
-// 画面表示時に軽く接続状態だけ見る（遷移はしない）
+// 画面表示時に接続状態だけ見る
 (async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); } })();
 </script>
 </body>
