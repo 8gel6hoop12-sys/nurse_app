@@ -14,11 +14,18 @@ h1{font-size:46px;margin:6px 0 14px}
 .lead{font-size:20px;line-height:1.9;margin:8px 0 22px}
 .btn{display:inline-flex;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0;border-radius:14px;padding:16px 24px;font-weight:800;font-size:22px;cursor:pointer}
 .btn:hover{filter:brightness(.98)}
+.btn.secondary{background:#54414d}
+.row{display:flex;flex-wrap:wrap;gap:12px}
 .badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;margin-left:8px}
 .badge.ok{background:#e6f6ec;color:#1b7a3f}
 .badge.ng{background:#ffe2e6;color:#8f1d28}
 .small{color:#6b5a64;font-size:14px}
 hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
+details{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;font-weight:700}
+kbd{background:#f0e6ea;border:1px solid #d8c3cc;border-bottom-width:2px;border-radius:6px;padding:1px 6px}
+.code{font-family:ui-monospace,Consolas,Menlo,monospace;background:#fff;border:1px dashed var(--line);border-radius:10px;padding:10px 12px}
+.link{color:#0b66c3;text-decoration:underline;cursor:pointer}
 </style>
 </head>
 <body>
@@ -26,16 +33,30 @@ hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
   <div class="card">
     <h1 id="title">いつもお疲れさまです</h1>
     <p id="msg" class="lead">
-      今日も安全と安心のために尽くしてくださって、ありがとうございます。<br>
-      ここでは、ふだんの流れのまま、入力と確認をすっと終わらせるお手伝いをします。<br>
+      夜勤も日勤も、本当にお疲れさまです。あなたの気づきが、患者さんの安心につながっています。<br>
       記録や画像は端末内だけで完結します。外へは出しません。
     </p>
 
-    <button id="btnStart" class="btn">▶ はじめる</button>
-    <span id="stat" class="badge ng">接続NG</span>
+    <div class="row" style="align-items:center">
+      <button id="btnSetup" class="btn">⬇ 初回インストール</button>
+      <button id="btnStart" class="btn secondary">▶ 起動する</button>
+      <span id="stat" class="badge ng">接続NG</span>
+    </div>
 
     <hr>
-    <div class="small" id="hint">［はじめる］を押すと接続確認 → 問題なければアプリ画面を開きます。</div>
+    <div class="small" id="hint">
+      まずは <b>初回インストール</b> を一度だけ実行してください。以後は <b>起動する</b> だけで使えます。<br>
+      起動ボタンは <code>http://127.0.0.1:8787</code> のローカル接続を確認して、問題なければアプリ画面へ進みます。
+    </div>
+
+    <details style="margin-top:14px">
+      <summary>手動手順（クリックして開く）</summary>
+      <ol class="small">
+        <li><b>Windows</b>：<a class="link" href="scripts/setup_win.bat" download>setup_win.bat をダウンロード</a> → ダブルクリック。<br>次回からは <a class="link" href="scripts/start_win.bat" download>start_win.bat</a> をダブルクリック。</li>
+        <li><b>macOS</b>：<a class="link" href="scripts/setup_mac.sh" download>setup_mac.sh をダウンロード</a> → 端末で
+          <span class="code">chmod +x setup_mac.sh && ./setup_mac.sh</span>。<br>次回からは <a class="link" href="scripts/start_mac.sh" download>start_mac.sh</a> を実行。</li>
+      </ol>
+    </details>
   </div>
 </div>
 
@@ -43,35 +64,57 @@ hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 const STAT = document.getElementById('stat');
 function setOK(ok){ STAT.textContent = ok?'接続OK':'接続NG'; STAT.className = 'badge ' + (ok?'ok':'ng'); }
 
-// 毎回ちょっと違う “ねぎらい” を表示（AI不要・軽量）
-(function(){
-  const lines = [
-    "夜勤も日勤も、本当にお疲れさまです。あなたの気づきが、患者さんの安心につながっています。",
-    "忙しい中でも丁寧なケアをありがとうございます。少しでも手間を減らせるよう整えました。",
-    "体調は大丈夫ですか？無理しすぎず、休める時はしっかり休んでくださいね。作業はここでサッと終わらせましょう。"
-  ];
-  const n = Math.floor(Math.random() * lines.length);
-  document.getElementById('msg').innerHTML =
-    lines[n] + "<br>記録や画像は端末内だけで完結します。外へは出しません。";
-})();
+function osKind(){
+  const ua = navigator.userAgent.toLowerCase();
+  if(ua.includes('windows')) return 'win';
+  if(ua.includes('mac os x')) return 'mac';
+  return 'other';
+}
 
-// 接続確認（自動遷移しない）
+// 接続確認（遷移はしない）
 async function ping(){
   try{
+    // no-cors で疎通だけ確認
     await fetch('http://127.0.0.1:8787/ai/health',{mode:'no-cors',cache:'no-store'});
     setOK(true); return true;
   }catch(e){ setOK(false); return false; }
 }
 
-// 「はじめる」を押したらだけ遷移
+// 初回インストール（OS自動振り分け）
+document.getElementById('btnSetup').addEventListener('click', async ()=>{
+  const kind = osKind();
+  if(kind==='win'){
+    // ダウンロードを開始して説明
+    const a = document.createElement('a');
+    a.href = 'scripts/setup_win.bat';
+    a.download = 'setup_win.bat';
+    document.body.appendChild(a); a.click(); a.remove();
+    alert('「setup_win.bat」をダウンロードしました。\nダブルクリックで実行してください。\n完了後、このページで［起動する］を押せます。');
+  }else if(kind==='mac'){
+    const a = document.createElement('a');
+    a.href = 'scripts/setup_mac.sh';
+    a.download = 'setup_mac.sh';
+    document.body.appendChild(a); a.click(); a.remove();
+    alert('「setup_mac.sh」をダウンロードしました。\nターミナルで次を実行:  chmod +x setup_mac.sh && ./setup_mac.sh\n完了後、このページで［起動する］を押せます。');
+  }else{
+    alert('Windows または macOS で開いてください。');
+  }
+});
+
+// 起動（疎通OKならUIへ）
 document.getElementById('btnStart').addEventListener('click', async ()=>{
   const ok = await ping();
   if(ok){ location.href = 'http://127.0.0.1:8787/nurse_ui.html'; }
-  else { alert('アプリが起動していません。\n配布側にお知らせください。'); }
+  else {
+    const kind = osKind();
+    if(kind==='win') alert('アプリがまだ起動していません。\n先に「setup_win.bat」(初回) または 「start_win.bat」(2回目以降) を実行してください。');
+    else if(kind==='mac') alert('アプリがまだ起動していません。\n先に「setup_mac.sh」(初回) または 「start_mac.sh」(2回目以降) を実行してください。');
+    else alert('アプリがまだ起動していません。');
+  }
 });
 
-// 画面表示時に軽く接続状態だけ見る（遷移はしない）
-(async ()=>{ for(let i=0;i<2;i++){ await ping(); await new Promise(r=>setTimeout(r,400)); } })();
+// 表示時に軽く接続状態チェック
+(async ()=>{ await ping(); })();
 </script>
 </body>
 </html>
