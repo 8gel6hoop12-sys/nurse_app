@@ -1,50 +1,20 @@
 @echo off
 setlocal
-cd /d "%~dp0\.."
+cd /d "%~dp0"
+REM フォルダ: nurse_app\files から 1つ上へ（プロジェクトルート）
+cd ..
 
-:: 1) Python
-where python >nul 2>nul
-if errorlevel 1 (
-  echo [INFO] Installing Python via winget...
-  winget install -e --id Python.Python.3 --accept-package-agreements --accept-source-agreements
-)
-
-:: 2) venv
+echo [1/4] venv 準備…
 if not exist ".venv" (
-  echo [INFO] Creating venv...
-  python -m venv .venv
+  py -3 -m venv .venv || (echo venv作成失敗 & pause & exit /b 1)
 )
 
-:: 3) pip & requirements（任意：無ければスキップ）
-call .venv\Scripts\python -m pip install -U pip
-if exist requirements.txt (
-  call .venv\Scripts\python -m pip install -r requirements.txt
-)
+echo [2/4] pip アップグレード…
+".venv\Scripts\python.exe" -m pip install -U pip
 
-:: 4) Ollama
-where ollama >nul 2>nul
-if errorlevel 1 (
-  echo [INFO] Installing Ollama...
-  winget install -e --id Ollama.Ollama --accept-package-agreements --accept-source-agreements
-)
+echo [3/4] 依存インストール…
+".venv\Scripts\python.exe" -m pip install -r requirements.txt
 
-:: 5) モデル
-set "AI_MODEL=qwen2.5:7b-instruct"
-set FOUND=
-for /f "tokens=* delims=" %%A in ('ollama list ^| findstr /i "%AI_MODEL%"') do set FOUND=1
-if not defined FOUND (
-  echo [INFO] Pulling %AI_MODEL% ...
-  ollama pull %AI_MODEL%
-)
-
-:: 6) 起動
-set "AI_PROVIDER=ollama"
-set "AI_MODEL=qwen2.5:7b-instruct"
-set "OLLAMA_HOST=http://127.0.0.1:11434"
-set "AI_LOG_DISABLE=1"
-
-start "" "%CD%\.venv\Scripts\python.exe" nurse_server.py --port 8787
-timeout /t 1 >nul
-start "" http://127.0.0.1:8787/
-echo 起動しました。ブラウザが開かない場合は http://127.0.0.1:8787/ を開いてください。
+echo [4/4] 動作確認…
+".venv\Scripts\python.exe" nurse_server.py --port 8787
 pause

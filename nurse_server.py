@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-nurse_server.py — ローカルWebサーバ（UI/API一体）
+nurse_server.py — ローカルWebサーバ（UI/API/静的配信）
 起動:  python nurse_server.py --port 8787
 """
-import os, json, threading, argparse, re, runpy, io, sys, time
+import os, json, threading, argparse, re, runpy, io, sys, time, mimetypes
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
@@ -11,6 +11,9 @@ from urllib.parse import urlparse
 # 実行ディレクトリ固定
 APP_DIR = Path(__file__).resolve().parent
 os.chdir(APP_DIR)
+
+# 静的配信ルート
+FILES_DIR = (APP_DIR / "files").resolve()
 
 # プライバシー徹底（OpenAI遮断・Ollamaローカル固定）
 os.environ["AI_PROVIDER"]    = "ollama"
@@ -41,10 +44,8 @@ def _warm_ollama():
         host  = os.environ.get("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
         model = os.environ.get("AI_MODEL","qwen2.5:7b-instruct")
         payload = _json.dumps({
-            "model": model,
-            "prompt": "ok",
-            "stream": False,
-            "keep_alive": "24h",
+            "model": model, "prompt": "ok",
+            "stream": False, "keep_alive": "24h",
             "options": {"temperature": 0}
         }).encode("utf-8")
         req = urllib.request.Request(f"{host}/api/generate", data=payload,
@@ -54,12 +55,8 @@ def _warm_ollama():
     except Exception as e:
         print(f"[warm] skip ({e})")
 
-# ---------- 速度対策 2: サブプロセスを使わず同一プロセス実行 ----------
+# ---------- 速度対策 2: assessment.py 等を同一プロセス実行 ----------
 def _run_inproc(script_path: Path, stdin_text: str|None = None):
-    """
-    assessment.py 等、既存スクリプトを “そのまま”
-    __main__ として実行。stdin/stdout を差し替えて出力を取得。
-    """
     t0 = time.time()
     old_in, old_out = sys.stdin, sys.stdout
     buf_in  = io.StringIO(stdin_text or "")
@@ -81,13 +78,9 @@ def _run_inproc(script_path: Path, stdin_text: str|None = None):
     return rc, out
 
 def _spawn(name, script_filename, stdin_text=None):
-    """
-    互換API: 以前は subprocess だったが、同一プロセス実行に置換。
-    """
     with LOCK:
         TASKS[name] = {"running": True, "done": False, "rc": None,
                        "result": "", "stdout": "", "stderr": "", "proc": "inproc"}
-
     def run():
         try:
             rc, out = _run_inproc(APP_DIR / script_filename, stdin_text)
@@ -100,7 +93,6 @@ def _spawn(name, script_filename, stdin_text=None):
     threading.Thread(target=run, daemon=True).start()
 
 def _cancel(name):
-    # 同一プロセス実行なので強制停止は難しい。状態のみ落とす。
     with LOCK:
         TASKS.setdefault(name,{}).update({"running":False,"done":False,"rc":None})
 
@@ -128,7 +120,6 @@ def _extract_json_block(s: str):
     except Exception: return None
 
 def _ai_map_so(text: str):
-    """Ollama に投げて S/O の各項目に割り振る。失敗しても空で返す。"""
     try:
         import json as _json, urllib.request
         host  = os.environ.get("OLLAMA_HOST","http://127.0.0.1:11434").rstrip("/")
@@ -138,16 +129,13 @@ def _ai_map_so(text: str):
 出力は**厳密なJSON**のみ。キーは以下に限定。
 S側: shuso, keika, bui, seishitsu, inyo, zuikan, life, back, think, etc
 O側: name, T, HR, RR, SpO2, SBP, DBP, NRS, awareness, resp, circ, excrete, lab, risk, active, high, weight, etc
-値は文字列。無ければ空文字。日本語のままで。数字はあれば抽出。
-
+値は文字列。無ければ空文字。日本語のままで。
 テキスト:
 {text}
 """
         payload = _json.dumps({
-            "model": model,
-            "prompt": prompt,
-            "stream": False,
-            "keep_alive": "24h",
+            "model": model, "prompt": prompt,
+            "stream": False, "keep_alive": "24h",
             "options": {"temperature": 0}
         }).encode("utf-8")
         req = urllib.request.Request(f"{host}/api/generate", data=payload,
@@ -162,46 +150,62 @@ O側: name, T, HR, RR, SpO2, SBP, DBP, NRS, awareness, resp, circ, excrete, lab,
     except Exception:
         return {"S":{}, "O":{}}
 
-class Handler(BaseHTTPRequestHandler):
-    def _send_json(self, obj, code=200):
-        buf = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type","application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(buf)))
-        self.end_headers()
-        self.wfile.write(buf)
+# ----------- 静的配信（/files/* と index / nurse_ui） -----------
+def _safe_join_files(subpath: str) -> Path|None:
+    # 先頭の /files/ をはずして正規化、ディレクトリトラバーサル対策
+    p = (FILES_DIR / Path(subpath).name) if "/" not in subpath else (FILES_DIR / subpath.split("/")[-1])
+    try:
+        rp = p.resolve()
+        if str(rp).startswith(str(FILES_DIR)):
+            return rp if rp.exists() else None
+        return None
+    except Exception:
+        return None
 
-    def _send_bytes(self, data: bytes, ctype="application/octet-stream"):
-        self.send_response(200)
+def _mime_guess(fn: str) -> str:
+    m, _ = mimetypes.guess_type(fn)
+    if m: return m
+    # .bat/.sh など手当
+    if fn.endswith(".bat"): return "application/octet-stream"
+    if fn.endswith(".sh"):  return "application/x-sh"
+    if fn.endswith(".txt"): return "text/plain; charset=utf-8"
+    if fn.endswith(".json"):return "application/json; charset=utf-8"
+    return "application/octet-stream"
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, data: bytes, ctype="application/octet-stream", code=200):
+        self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_json(self, obj, code=200): self._send(json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8", code)
+
     def do_GET(self):
         p = urlparse(self.path).path
         if p in ("/","/index.html"):
-            return self._send_bytes(Path("index.html").read_bytes(), "text/html; charset=utf-8")
+            return self._send(Path("index.html").read_bytes(), "text/html; charset=utf-8")
         if p in ("/nurse_ui.html","/app"):
-            return self._send_bytes(Path("nurse_ui.html").read_bytes(), "text/html; charset=utf-8")
+            return self._send(Path("nurse_ui.html").read_bytes(), "text/html; charset=utf-8")
         if p == "/ai/health":
             return self._send_json({"ok": True, "message": "alive"})
         if p == "/nanda.xlsx":
-            if not Path(NANDA_XLSX).exists():
-                return self._send_json({"ok":False,"error":"nanda_db.xlsx not found"},404)
-            return self._send_bytes(Path(NANDA_XLSX).read_bytes(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            q = Path(NANDA_XLSX)
+            if not q.exists(): return self._send_json({"ok":False,"error":"nanda_db.xlsx not found"},404)
+            return self._send(q.read_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
         if p.startswith("/files/"):
-            fn = p.replace("/files/","",1)
-            q = Path(fn)
-            if not q.exists(): return self._send_json({"ok":False,"error":"not found"},404)
-            ctype = "text/plain; charset=utf-8"
-            if fn.endswith(".json"): ctype="application/json; charset=utf-8"
-            return self._send_bytes(q.read_bytes(), ctype)
+            sub = p.replace("/files/","",1)
+            q = _safe_join_files(sub)
+            if not q: return self._send_json({"ok":False,"error":"not found"},404)
+            return self._send(q.read_bytes(), _mime_guess(q.name))
+
         if p.startswith("/status/"):
             key = p.split("/")[-1]
             st = TASKS.get(key, {"running": False, "done": False})
             return self._send_json(st)
+
         return self._send_json({"ok":False,"error":"not found"},404)
 
     def do_POST(self):
@@ -222,22 +226,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"ok": True})
 
         if p == "/run/diagnosis":
-            _spawn("diagnosis", "diagnosis.py")
-            return self._send_json({"ok": True})
-
+            _spawn("diagnosis", "diagnosis.py");  return self._send_json({"ok": True})
         if p == "/run/record":
-            _spawn("record", "record.py")
-            return self._send_json({"ok": True})
-
+            _spawn("record", "record.py");        return self._send_json({"ok": True})
         if p == "/run/careplan":
-            _spawn("careplan", "careplan.py")
-            return self._send_json({"ok": True})
+            _spawn("careplan", "careplan.py");    return self._send_json({"ok": True})
 
         if p.startswith("/cancel/"):
             _cancel(p.split("/")[-1]); return self._send_json({"ok": True})
 
         if p in ("/review/assessment","/review/record","/review/careplan"):
-            text = (js.get("text") or "").trim() if hasattr(str, "trim") else (js.get("text") or "").strip()
+            text = (js.get("text") or "").strip()
             return self._send_json({"ok": True, "review": text})
 
         if p == "/ai/map_so":
@@ -252,7 +251,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=int(os.environ.get("NURSE_PORT","8787")))
     args = ap.parse_args()
-    _warm_ollama()  # 起動時にモデル常駐
+    _warm_ollama()
     httpd = HTTPServer((args.host, args.port), Handler)
     print(f"Serving on http://{args.host}:{args.port}")
     httpd.serve_forever()
